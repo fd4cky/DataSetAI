@@ -3,22 +3,21 @@
 {% block title %}DataSetAI | Профиль{% endblock %}
 
 {% block content %}
-    <section class="page-topbar">
+    <section class="page-topbar page-topbar--profile">
         <div class="page-topbar__copy">
             <span class="eyebrow">Профиль</span>
             <h1>Статистика пользователя</h1>
             <p>Сводка по созданным комнатам, участию в разметке и личной активности.</p>
         </div>
+        <div class="card-grid profile-metrics-grid" id="profile-metrics"></div>
     </section>
 
-    <section class="card-grid card-grid--four" id="profile-metrics"></section>
-
-    <section class="wide-card wide-card--stack">
+    <section class="wide-card wide-card--stack wide-card--profile">
         <div class="wide-card__column">
             <h2>О пользователе</h2>
             <div id="profile-summary" class="summary-stack empty-card">Данные профиля загружаются.</div>
         </div>
-        <div class="wide-card__column">
+        <div class="wide-card__column wide-card__column--activity">
             <h2>Активность</h2>
             <div id="profile-activity" class="activity-board"></div>
         </div>

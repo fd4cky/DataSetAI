@@ -7,8 +7,8 @@ def make_user(*, username: str, role: str, email: str | None = None) -> User:
     return User.objects.create(username=username, email=email or f"{username}@example.com", role=role)
 
 
-def make_room(*, customer: User, title: str = "Room", description: str = "") -> Room:
-    return Room.objects.create(title=title, description=description, created_by=customer)
+def make_room(*, customer: User, title: str = "Room", description: str = "", dataset_type: str = Room.DatasetType.DEMO) -> Room:
+    return Room.objects.create(title=title, description=description, created_by=customer, dataset_type=dataset_type)
 
 
 def invite_annotator(*, room: Room, annotator: User, invited_by: User, joined: bool = False) -> RoomMembership:
@@ -21,5 +21,16 @@ def invite_annotator(*, room: Room, annotator: User, invited_by: User, joined: b
     return membership
 
 
-def make_task(*, room: Room, payload: dict) -> Task:
-    return Task.objects.create(room=room, input_payload=payload)
+def make_task(
+    *,
+    room: Room,
+    payload: dict,
+    source_type: str = Task.SourceType.TEXT,
+    source_name: str = "",
+) -> Task:
+    return Task.objects.create(
+        room=room,
+        input_payload=payload,
+        source_type=source_type,
+        source_name=source_name,
+    )

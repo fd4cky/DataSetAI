@@ -1,7 +1,14 @@
+import json
+import tempfile
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.labeling.models import Annotation, Task
 from apps.rooms.models import RoomMembership
 from apps.users.models import User
 from tests.factories import invite_annotator, make_room, make_user
@@ -9,6 +16,11 @@ from tests.factories import invite_annotator, make_room, make_user
 
 class RoomsApiTests(APITestCase):
     def setUp(self):
+        self.media_dir = tempfile.TemporaryDirectory()
+        self.override = override_settings(MEDIA_ROOT=self.media_dir.name)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(self.media_dir.cleanup)
         self.customer = make_user(username="customer", role=User.Role.CUSTOMER)
         self.annotator = make_user(username="annotator", role=User.Role.ANNOTATOR)
         self.other_annotator = make_user(username="annotator2", role=User.Role.ANNOTATOR)
@@ -82,3 +94,80 @@ class RoomsApiTests(APITestCase):
         self.assertEqual(response.data["redirect_url"], f"/rooms/{room.id}/")
         membership = RoomMembership.objects.get(room=room, user=self.annotator)
         self.assertEqual(membership.status, RoomMembership.Status.JOINED)
+
+    def test_customer_can_create_image_room_with_labels_and_uploads(self):
+        response = self.client.post(
+            reverse("room-list-create"),
+            {
+                "title": "Image room",
+                "dataset_mode": "image",
+                "dataset_label": "Cars",
+                "labels": json.dumps(
+                    [
+                        {"name": "car", "color": "#FF6B6B"},
+                        {"name": "truck", "color": "#4ECDC4"},
+                    ]
+                ),
+                "media_manifest": json.dumps(
+                    [
+                        {"name": "car-1.jpg", "width": 1920, "height": 1080},
+                        {"name": "car-2.jpg", "width": 1280, "height": 720},
+                    ]
+                ),
+                "dataset_files": [
+                    SimpleUploadedFile("car-1.jpg", b"fake-image-1", content_type="image/jpeg"),
+                    SimpleUploadedFile("car-2.jpg", b"fake-image-2", content_type="image/jpeg"),
+                ],
+            },
+            format="multipart",
+            **self.auth(self.customer),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        room = self.customer.created_rooms.get(id=response.data["id"])
+        self.assertEqual(room.dataset_type, "image")
+        self.assertEqual(room.labels.count(), 2)
+        self.assertEqual(room.tasks.count(), 2)
+        first_task = room.tasks.order_by("id").first()
+        self.assertEqual(first_task.source_type, Task.SourceType.IMAGE)
+        self.assertTrue(first_task.source_file.name)
+        self.assertEqual(first_task.input_payload["width"], 1920)
+
+    def test_customer_can_export_native_room_dataset(self):
+        room = make_room(customer=self.customer, title="Export room", dataset_type="image")
+        label = room.labels.create(name="car", color="#FF6B6B", sort_order=0)
+        task = Task.objects.create(
+            room=room,
+            source_type=Task.SourceType.IMAGE,
+            source_name="car-1.jpg",
+            input_payload={"width": 640, "height": 480, "source_name": "car-1.jpg"},
+        )
+        Annotation.objects.create(
+            task=task,
+            annotator=self.annotator,
+            result_payload={
+                "annotations": [
+                    {
+                        "type": "bbox",
+                        "label_id": label.id,
+                        "points": [10, 12, 110, 112],
+                        "frame": 0,
+                        "attributes": [],
+                        "occluded": False,
+                    }
+                ]
+            },
+            submitted_at=timezone.now(),
+        )
+
+        response = self.client.get(
+            f'{reverse("room-export", kwargs={"room_id": room.id})}?export_format=native_json',
+            **self.auth(self.customer),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("attachment;", response["Content-Disposition"])
+        payload = json.loads(response.content)
+        self.assertEqual(payload["room"]["id"], room.id)
+        self.assertEqual(payload["labels"][0]["name"], "car")
+        self.assertEqual(payload["tasks"][0]["annotation"]["annotations"][0]["label_id"], label.id)

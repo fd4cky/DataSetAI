@@ -1,16 +1,28 @@
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.validators import RegexValidator
 
 from common.models import TimeStampedModel
 
 
 class Room(TimeStampedModel):
+    class DatasetType(models.TextChoices):
+        DEMO = "demo", "Demo"
+        JSON = "json", "JSON"
+        IMAGE = "image", "Image"
+        VIDEO = "video", "Video"
+
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     access_password_hash = models.CharField(max_length=255, blank=True)
     deadline = models.DateTimeField(null=True, blank=True)
     dataset_label = models.CharField(max_length=255, blank=True)
+    dataset_type = models.CharField(
+        max_length=16,
+        choices=DatasetType.choices,
+        default=DatasetType.DEMO,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -34,6 +46,25 @@ class Room(TimeStampedModel):
         if not self.access_password_hash:
             return True
         return check_password(raw_password or "", self.access_password_hash)
+
+
+class RoomLabel(TimeStampedModel):
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="labels")
+    name = models.CharField(max_length=64)
+    color = models.CharField(
+        max_length=7,
+        validators=[RegexValidator(regex=r"^#[0-9A-Fa-f]{6}$")],
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ("sort_order", "id")
+        constraints = [
+            models.UniqueConstraint(fields=("room", "name"), name="unique_room_label_name"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.room_id}:{self.name}"
 
 
 class RoomMembership(TimeStampedModel):

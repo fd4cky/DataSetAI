@@ -7,19 +7,24 @@ from django.utils import timezone
 from apps.labeling.models import Annotation, Task
 
 from apps.rooms.models import Room, RoomMembership
+from apps.rooms.services import get_supported_export_formats
 from apps.users.models import User
 from common.exceptions import NotFoundError
 
 
 def list_owned_rooms(*, user: User) -> QuerySet[Room]:
-    return Room.objects.filter(created_by=user).select_related("created_by").prefetch_related("tasks", "memberships")
+    return (
+        Room.objects.filter(created_by=user)
+        .select_related("created_by")
+        .prefetch_related("tasks", "memberships", "labels")
+    )
 
 
 def list_member_rooms(*, user: User) -> QuerySet[Room]:
     return (
         Room.objects.filter(memberships__user=user)
         .select_related("created_by")
-        .prefetch_related("memberships", "tasks")
+        .prefetch_related("memberships", "tasks", "labels")
         .distinct()
     )
 
@@ -33,7 +38,7 @@ def get_room_for_owner(*, room_id: int, owner: User) -> Room:
 
 def get_room_by_id(*, room_id: int) -> Room:
     try:
-        return Room.objects.select_related("created_by").prefetch_related("memberships").get(id=room_id)
+        return Room.objects.select_related("created_by").prefetch_related("memberships", "labels").get(id=room_id)
     except Room.DoesNotExist as exc:
         raise NotFoundError("Room not found.") from exc
 
@@ -91,11 +96,22 @@ def build_room_dashboard(*, room: Room, actor: User) -> dict:
             "title": room.title,
             "description": room.description,
             "dataset_label": room.dataset_label,
+            "dataset_type": room.dataset_type,
             "deadline": room.deadline.isoformat() if room.deadline else None,
             "has_password": room.has_password,
             "created_by_id": room.created_by_id,
             "membership_status": "owner" if room.created_by_id == actor.id else actor_membership_status,
         },
+        "labels": [
+            {
+                "id": label.id,
+                "name": label.name,
+                "color": label.color,
+                "sort_order": label.sort_order,
+            }
+            for label in room.labels.all()
+        ],
+        "export_formats": get_supported_export_formats(room=room),
         "overview": overview,
         "actor": {
             "id": actor.id,

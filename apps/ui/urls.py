@@ -6,6 +6,7 @@ from apps.ui.views import (
     ProfileView,
     RegisterPageView,
     RoomCreateView,
+    RoomWorkView,
     RoomsView,
     RoomWorkspaceView,
     UserLogoutView,
@@ -20,5 +21,6 @@ urlpatterns = [
     path("rooms/", RoomsView.as_view(), name="ui-rooms"),
     path("rooms/create/", RoomCreateView.as_view(), name="ui-room-create"),
     path("rooms/<int:room_id>/", RoomWorkspaceView.as_view(), name="ui-room-detail"),
+    path("rooms/<int:room_id>/work/", RoomWorkView.as_view(), name="ui-room-work"),
     path("profile/", ProfileView.as_view(), name="ui-profile"),
 ]

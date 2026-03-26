@@ -81,6 +81,12 @@ class RoomWorkspaceView(LoginRequiredMixin, UiContextMixin, TemplateView):
     page_key = "room-detail"
 
 
+class RoomWorkView(LoginRequiredMixin, UiContextMixin, TemplateView):
+    template_name = "ui/room_work.html"
+    active_page = "rooms"
+    page_key = "room-work"
+
+
 class AuthContextMixin(UiContextMixin):
     active_page = "auth"
 

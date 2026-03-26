@@ -7,12 +7,12 @@
         <div class="page-topbar__copy">
             <span class="eyebrow">Создание комнаты</span>
             <h1>Новая комната для разметки</h1>
-            <p>Задай название, пароль, дедлайн, тестовый датасет и список участников, которых нужно пригласить.</p>
+            <p>Загрузи JSON, фото или видео, задай label palette и пригласи исполнителей в комнату.</p>
         </div>
     </section>
 
     <section class="create-layout">
-        <form id="room-create-form" class="form-card">
+        <form id="room-create-form" class="form-card" enctype="multipart/form-data">
             <div class="form-grid">
                 <label class="field">
                     <span>Название комнаты</span>
@@ -35,10 +35,19 @@
                     <input name="annotator_ids" type="text" placeholder="Например, 2,3,7">
                 </label>
                 <label class="field">
+                    <span>Тип датасета</span>
+                    <select id="dataset-mode-select" name="dataset_mode">
+                        <option value="demo" selected>Demo JSON</option>
+                        <option value="json">JSON файл</option>
+                        <option value="image">Фото</option>
+                        <option value="video">Видео</option>
+                    </select>
+                </label>
+                <label class="field">
                     <span>Название датасета</span>
                     <input name="dataset_label" type="text" value="Тестовый датасет">
                 </label>
-                <label class="field">
+                <label id="test-task-count-field" class="field">
                     <span>Количество тестовых задач</span>
                     <input name="test_task_count" type="number" min="1" max="100" value="12">
                 </label>
@@ -47,13 +56,24 @@
             <div class="dataset-box">
                 <div>
                     <h2>Загрузка датасета</h2>
-                    <p>Для текущего теста используется встроенный demo-набор. Реальную загрузку файла добавим следующим шагом.</p>
+                    <p id="dataset-upload-hint">Для demo-режима будет создан встроенный набор текстовых задач. Для JSON, фото и видео можно загрузить реальные файлы.</p>
                 </div>
-                <div class="dataset-box__actions">
-                    <button class="btn btn--primary" type="button" disabled>Тестовый датасет подключен</button>
-                    <input type="file" disabled>
+                <div class="dataset-box__actions dataset-box__actions--stack">
+                    <input id="dataset-files-input" name="dataset_files" type="file">
+                    <div id="dataset-files-summary" class="panel-note">Файлы пока не выбраны.</div>
                 </div>
             </div>
+
+            <section id="label-editor-section" class="form-card form-card--nested hidden">
+                <div class="panel-card__head">
+                    <h2>Лейблы для разметки</h2>
+                </div>
+                <p class="panel-note">Цвет каждому label-у назначается случайно, но его можно сразу изменить через встроенную палитру.</p>
+                <div id="label-editor-list" class="label-editor-list"></div>
+                <div class="form-actions form-actions--tight">
+                    <button id="add-label-btn" class="btn btn--muted" type="button">Добавить лейбл</button>
+                </div>
+            </section>
 
             <div class="form-actions">
                 <a class="btn btn--muted" href="/rooms/">Назад к комнатам</a>
@@ -61,13 +81,5 @@
             </div>
         </form>
 
-        <aside class="side-note">
-            <h2>Что будет создано</h2>
-            <ul>
-                <li>Комната с названием, описанием, паролем и дедлайном.</li>
-                <li>Тестовый набор задач для ручной проверки полного цикла.</li>
-                <li>Приглашения для указанных участников.</li>
-            </ul>
-        </aside>
     </section>
 {% endblock %}

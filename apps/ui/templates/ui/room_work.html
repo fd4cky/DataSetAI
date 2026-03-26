@@ -1,0 +1,43 @@
+{% extends "ui/base.html" %}
+
+{% block title %}DataSetAI | Работа в комнате{% endblock %}
+
+{% block content %}
+    <section id="room-workspace" class="workspace-grid workspace-grid--single">
+        <div class="workspace-grid__main">
+            <div class="panel-card panel-card--workscreen">
+                <div class="action-strip">
+                    <a class="btn btn--muted" href="/rooms/{{ room_id }}/">Назад в комнату</a>
+                    <button id="work-join-btn" class="btn btn--muted" type="button">Войти в комнату</button>
+                    <button id="work-next-task-btn" class="btn btn--primary" type="button">Взять задачу</button>
+                </div>
+                <div id="work-task-box" class="empty-card">Задача пока не выбрана.</div>
+                <form id="work-submit-form" class="stack-form hidden">
+                    <div id="work-media-tool" class="media-tool hidden">
+                        <div id="work-media-instructions" class="panel-note">
+                            Зажми левую кнопку мыши и выдели область. Потом выбери label и кликни по области один раз, чтобы назначить его.
+                        </div>
+                        <div id="work-label-palette" class="label-chip-list"></div>
+                        <div id="work-active-label" class="panel-note">Активный label пока не выбран.</div>
+                        <div class="media-tool__layout">
+                            <div id="work-media-stage" class="media-stage empty-card">Файл задачи загрузится после выбора задания.</div>
+                            <div class="media-tool__sidebar">
+                                <div class="panel-note">Области без label-а не дадут отправить задачу.</div>
+                                <div id="work-annotation-list" class="annotation-list empty-card">Разметка пока отсутствует.</div>
+                                <button id="work-clear-annotations-btn" class="btn btn--muted" type="button">Очистить разметку</button>
+                            </div>
+                        </div>
+                    </div>
+                    <label class="field">
+                        <span id="work-result-label">Результат разметки</span>
+                        <textarea id="work-result-json" rows="10">{
+  "label": "positive",
+  "confidence": 0.95
+}</textarea>
+                    </label>
+                    <button class="btn btn--primary" type="submit">Отправить результат</button>
+                </form>
+            </div>
+        </div>
+    </section>
+{% endblock %}

@@ -63,9 +63,8 @@ class RoomsApiTests(APITestCase):
             **self.auth(self.annotator),
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        membership = RoomMembership.objects.get(room=room, user=self.annotator)
-        self.assertEqual(membership.status, RoomMembership.Status.JOINED)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(RoomMembership.objects.filter(room=room, user=self.annotator).exists())
 
     def test_user_can_enter_room_by_id_and_password(self):
         room = make_room(customer=self.customer, title="Password room")

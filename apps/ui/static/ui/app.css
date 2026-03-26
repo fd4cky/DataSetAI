@@ -862,13 +862,19 @@ textarea:focus {
 
 .activity-board {
     margin-top: 18px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
 .activity-board__calendar {
+    display: inline-block;
     overflow-x: auto;
     padding: 12px;
     border-radius: var(--radius-md);
     background: var(--calendar-background);
+    vertical-align: top;
 }
 
 .activity-board__months {
@@ -918,6 +924,7 @@ textarea:focus {
     margin-top: 10px;
     color: var(--text-soft);
     font-size: 0.84rem;
+    text-align: right;
 }
 
 .annotators-list {

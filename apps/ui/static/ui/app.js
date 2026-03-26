@@ -177,6 +177,27 @@ function formatMonthLabel(dateString) {
     .replace(".", "");
 }
 
+function shiftDateString(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatWeeksLabel(count) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return "неделю";
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return "недели";
+  }
+
+  return "недель";
+}
+
 function buildActivityMonthLabels(series) {
   const labels = [];
   let previousMonthKey = null;
@@ -207,6 +228,26 @@ function buildActivityMonthLabels(series) {
   return labels;
 }
 
+function buildCalendarSeries(series, targetWeekCount = 12) {
+  const totalDays = targetWeekCount * 7;
+  const seriesByDate = new Map(series.map((item) => [item.date, item.count]));
+  const lastDate = series[series.length - 1]?.date;
+
+  if (!lastDate) {
+    return [];
+  }
+
+  const firstDate = shiftDateString(lastDate, -(totalDays - 1));
+
+  return Array.from({ length: totalDays }, (_, index) => {
+    const date = shiftDateString(firstDate, index);
+    return {
+      date,
+      count: seriesByDate.get(date) || 0,
+    };
+  });
+}
+
 function renderActivity(container, series) {
   if (!container) {
     return;
@@ -217,12 +258,14 @@ function renderActivity(container, series) {
     return;
   }
 
-  const maxCount = Math.max(...series.map((item) => item.count), 0);
-  const weekCount = Math.ceil(series.length / 7);
-  const monthLabels = buildActivityMonthLabels(series);
+  const targetWeekCount = 12;
+  const calendarSeries = buildCalendarSeries(series, targetWeekCount);
+  const maxCount = Math.max(...calendarSeries.map((item) => item.count), 0);
+  const calendarWidth = targetWeekCount * 14 + (targetWeekCount - 1) * 4 + 24;
+  const monthLabels = buildActivityMonthLabels(calendarSeries);
   container.innerHTML = `
-    <div class="activity-board__calendar">
-      <div class="activity-board__months" style="grid-template-columns: repeat(${weekCount}, 14px);">
+    <div class="activity-board__calendar" style="width: ${calendarWidth}px; max-width: 100%;">
+      <div class="activity-board__months" style="grid-template-columns: repeat(${targetWeekCount}, 14px);">
         ${monthLabels
           .map(
             (item) =>
@@ -230,8 +273,8 @@ function renderActivity(container, series) {
           )
           .join("")}
       </div>
-      <div class="activity-board__grid" style="grid-template-columns: repeat(${weekCount}, 14px);">
-        ${series
+      <div class="activity-board__grid" style="grid-template-columns: repeat(${targetWeekCount}, 14px);">
+        ${calendarSeries
           .map((item) => {
             let level = 0;
             if (item.count > 0 && maxCount > 0) {
@@ -244,7 +287,7 @@ function renderActivity(container, series) {
           .join("")}
       </div>
     </div>
-    <div class="activity-board__legend">Интенсивность активности за последние 7 недель</div>
+    <div class="activity-board__legend">Интенсивность активности за последние ${targetWeekCount} ${formatWeeksLabel(targetWeekCount)}</div>
   `;
 }
 

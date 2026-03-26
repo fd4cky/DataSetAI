@@ -26,13 +26,38 @@ const state = {
   user: authUser,
   currentTask: null,
   roomDashboard: null,
+  theme: document.documentElement.dataset.theme || "light",
   pageRefresh: () => {},
 };
 
 const globalElements = {
-  currentUserBadge: document.getElementById("current-user-badge"),
   globalFlash: document.getElementById("global-flash"),
+  themeToggle: document.getElementById("theme-toggle"),
 };
+
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem("datasetai-theme", theme);
+  } catch (error) {
+    // no-op for restricted environments
+  }
+
+  if (globalElements.themeToggle) {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    globalElements.themeToggle.checked = theme === "dark";
+    globalElements.themeToggle.setAttribute("aria-label", `Переключить на ${nextTheme === "dark" ? "тёмную" : "светлую"} тему`);
+    globalElements.themeToggle.setAttribute("title", `Переключить на ${nextTheme === "dark" ? "тёмную" : "светлую"} тему`);
+  }
+}
+
+function initThemeToggle() {
+  applyTheme(state.theme);
+  globalElements.themeToggle?.addEventListener("change", (event) => {
+    applyTheme(event.target.checked ? "dark" : "light");
+  });
+}
 
 function translateRole(role) {
   return roleLabels[role] || role;
@@ -72,12 +97,6 @@ function showFlash(message, type = "success") {
 function clearFlash() {
   globalElements.globalFlash.className = "global-flash hidden";
   globalElements.globalFlash.textContent = "";
-}
-
-function renderHeaderUser() {
-  if (globalElements.currentUserBadge && state.user) {
-    globalElements.currentUserBadge.innerHTML = `<strong>${state.user.username}</strong><span>Личный кабинет</span>`;
-  }
 }
 
 async function api(path, options = {}) {
@@ -230,7 +249,7 @@ function renderActivity(container, series) {
 }
 
 function initGlobalHeader() {
-  renderHeaderUser();
+  initThemeToggle();
   if (state.user) {
     state.pageRefresh();
   }

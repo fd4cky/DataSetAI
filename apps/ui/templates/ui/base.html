@@ -5,7 +5,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}DataSetAI{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'ui/app.css' %}">
+    <script>
+        (function () {
+            var storedTheme = null;
+            try {
+                storedTheme = localStorage.getItem("datasetai-theme");
+            } catch (error) {
+                storedTheme = null;
+            }
+            var preferredTheme = storedTheme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+            document.documentElement.dataset.theme = preferredTheme;
+        })();
+    </script>
+    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=theme-toggle-3">
     {{ stats|json_script:"app-stats-data" }}
     {{ auth_user_data|json_script:"auth-user-data" }}
 </head>
@@ -28,16 +40,16 @@
 
             <div class="site-header__right">
                 <div class="auth-actions">
+                    <div class="theme-toggle-shell">
+                        <input id="theme-toggle" class="theme-toggle__checkbox" type="checkbox" aria-label="Переключить тему">
+                        <label for="theme-toggle" class="theme-toggle__label"></label>
+                    </div>
                     {% if request.user.is_authenticated %}
-                        <a id="header-profile-link" class="btn btn--muted btn--compact" href="/profile/">Профиль</a>
+                        <a id="header-profile-link" class="btn btn--muted btn--compact" href="/profile/">{{ request.user.username }}</a>
                         <form action="/auth/logout/" method="post" class="logout-form">
                             {% csrf_token %}
                             <button class="btn btn--secondary btn--compact" type="submit">Выйти</button>
                         </form>
-                        <div id="current-user-badge" class="current-user-badge">
-                            <strong>{{ request.user.username }}</strong>
-                            <span>Личный кабинет</span>
-                        </div>
                     {% else %}
                         <a class="btn btn--muted btn--compact" href="/auth/login/">Войти</a>
                         <a class="btn btn--primary btn--compact" href="/auth/register/">Зарегистрироваться</a>
@@ -53,6 +65,6 @@
         </main>
     </div>
 
-    <script src="{% static 'ui/app.js' %}"></script>
+    <script src="{% static 'ui/app.js' %}?v=theme-toggle-3"></script>
 </body>
 </html>

@@ -28,6 +28,14 @@ def env(key: str, default=None):
     return os.getenv(key, default)
 
 
+def env_any(*keys: str, default=None):
+    for key in keys:
+        value = os.getenv(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
 def env_bool(key: str, default: bool = False) -> bool:
     value = os.getenv(key)
     if value is None:
@@ -92,11 +100,11 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB", "datasetai"),
-        "USER": env("POSTGRES_USER", getpass.getuser()),
-        "PASSWORD": env("POSTGRES_PASSWORD", ""),
-        "HOST": env("POSTGRES_HOST", "127.0.0.1"),
-        "PORT": env("POSTGRES_PORT", "5432"),
+        "NAME": env_any("DB_NAME", "POSTGRES_DB", default="datasetai"),
+        "USER": env_any("DB_USER", "POSTGRES_USER", default=getpass.getuser()),
+        "PASSWORD": env_any("DB_PASSWORD", "POSTGRES_PASSWORD", default=""),
+        "HOST": env_any("DB_HOST", "POSTGRES_HOST", default="127.0.0.1"),
+        "PORT": env_any("DB_PORT", "POSTGRES_PORT", default="5432"),
     }
 }
 

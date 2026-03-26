@@ -22,7 +22,6 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
-            -vvv \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "whoami"
 

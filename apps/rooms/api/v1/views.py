@@ -1,3 +1,4 @@
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -19,7 +20,7 @@ from apps.rooms.selectors import (
     list_member_rooms,
     list_owned_rooms,
 )
-from apps.rooms.services import create_room, invite_user_to_room, join_room
+from apps.rooms.services import create_room, export_room_annotations, invite_user_to_room, join_room
 
 
 class RoomListCreateView(APIView):
@@ -32,7 +33,14 @@ class RoomListCreateView(APIView):
 
     def post(self, request):
         self.check_permissions(request)
-        serializer = RoomCreateSerializer(data=request.data)
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        dataset_files = request.FILES.getlist("dataset_files")
+        if hasattr(data, "setlist"):
+            data.setlist("dataset_files", dataset_files)
+        elif dataset_files:
+            data["dataset_files"] = dataset_files
+
+        serializer = RoomCreateSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         room = create_room(creator=request.user, **serializer.validated_data)
         return Response(
@@ -122,3 +130,19 @@ class RoomJoinView(APIView):
         serializer.is_valid(raise_exception=True)
         membership = join_room(room=room, annotator=request.user, password=serializer.validated_data.get("password"))
         return Response(RoomMembershipSerializer(membership).data)
+
+
+class RoomExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_id: int):
+        room = get_room_for_owner(room_id=room_id, owner=request.user)
+        export_format = request.query_params.get("format", "native_json")
+        artifact = export_room_annotations(
+            room=room,
+            export_format=export_format,
+            base_url=request.build_absolute_uri("/").rstrip("/"),
+        )
+        response = HttpResponse(artifact.content, content_type=artifact.content_type)
+        response["Content-Disposition"] = f'attachment; filename="{artifact.filename}"'
+        return response

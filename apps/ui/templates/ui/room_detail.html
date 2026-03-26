@@ -27,23 +27,14 @@
         <div class="workspace-grid__side">
             <div class="panel-card">
                 <div class="panel-card__head">
-                    <h2>Работа с задачами</h2>
+                    <h2>Рабочая среда</h2>
                 </div>
                 <div class="action-strip">
-                    <button id="detail-join-btn" class="btn btn--muted" type="button">Войти в комнату</button>
-                    <button id="detail-next-task-btn" class="btn btn--primary" type="button">Взять задачу</button>
+                    <button id="detail-work-btn" class="btn btn--primary" type="button">Приступить к работе</button>
                 </div>
-                <div id="detail-task-box" class="empty-card">Задача пока не выбрана.</div>
-                <form id="detail-submit-form" class="stack-form hidden">
-                    <label class="field">
-                        <span>Результат разметки</span>
-                        <textarea id="detail-result-json" rows="10">{
-  "label": "positive",
-  "confidence": 0.95
-}</textarea>
-                    </label>
-                    <button class="btn btn--primary" type="submit">Отправить результат</button>
-                </form>
+                <div id="detail-work-note" class="panel-note">
+                    На этой странице доступен только обзор комнаты. Вход в комнату, получение задач и отправка результата перенесены в отдельный рабочий экран.
+                </div>
             </div>
         </div>
     </section>
@@ -58,6 +49,17 @@
             </div>
         </div>
         <div class="workspace-grid__side workspace-grid__side--stack">
+            <div class="panel-card">
+                <div class="panel-card__head">
+                    <h2>Экспорт и лейблы</h2>
+                </div>
+                <div id="customer-labels" class="label-chip-list label-chip-list--static"></div>
+                <label class="field">
+                    <span>Формат выгрузки</span>
+                    <select id="detail-export-format"></select>
+                </label>
+                <button id="detail-export-btn" class="btn btn--secondary" type="button">Выгрузить датасет</button>
+            </div>
             <div class="panel-card">
                 <div class="panel-card__head">
                     <h2>Добавить исполнителя</h2>

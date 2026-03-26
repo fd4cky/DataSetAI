@@ -17,16 +17,16 @@ class RoomNextTaskView(APIView):
         task = get_next_task_for_annotator(room=room, annotator=request.user)
         if task is None:
             return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(TaskSerializer(task).data)
+        return Response(TaskSerializer(task, context={"request": request}).data)
 
 
 class TaskSubmitView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, task_id: int):
-        serializer = AnnotationSubmitSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         task = get_task_or_404(task_id=task_id)
+        serializer = AnnotationSubmitSerializer(data=request.data, context={"task": task})
+        serializer.is_valid(raise_exception=True)
         annotation = submit_annotation(
             task=task,
             annotator=request.user,

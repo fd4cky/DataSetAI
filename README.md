@@ -1,16 +1,18 @@
 # DataSetAI
 
-Django backend для платформы разметки датасетов. PostgreSQL на сервере остаётся закрытым наружу и доступен только через локальный SSH-туннель.
+Django-сервис для разметки датасетов. Проект использует PostgreSQL и рассчитан на командную работу через GitHub, Pull Request, CI и автодеплой.
 
-Схема подключения:
+## Что уже настроено
 
-```text
-localhost:6543 -> SSH tunnel -> server:127.0.0.1:5432
-```
+- локальный запуск через `.env`
+- обязательная конфигурация БД через `DB_*`
+- проверка подключения через `scripts/check_db.py`
+- CI на Pull Request в `main`
+- автодеплой на production после merge в `main`
 
-`.env` не хранится в git. В репозитории живут только шаблон и код, а реальные параметры БД разработчик заполняет локально.
+Подробности по серверу и деплою лежат в [DEPLOY.md](C:/Users/Roma/Desktop/projects/DataSetAI/DEPLOY.md).
 
-## Быстрый старт
+## Быстрый старт локально
 
 1. Клонируй репозиторий.
 
@@ -25,7 +27,7 @@ cd DataSetAI
 python -m venv .venv
 ```
 
-3. Активируй окружение.
+3. Активируй его.
 
 ```bash
 # macOS / Linux
@@ -67,13 +69,13 @@ DB_HOST=127.0.0.1
 DB_PORT=6543
 ```
 
-7. Подними SSH-туннель в отдельном терминале.
+7. Подними SSH-туннель к dev-базе в отдельном терминале, если база живёт на удалённом сервере.
 
 ```powershell
 ssh -N -L 6543:127.0.0.1:5432 <ssh_user>@<server_ip>
 ```
 
-8. Проверь подключение к базе.
+8. Проверь соединение с БД.
 
 ```bash
 python scripts/check_db.py
@@ -99,9 +101,9 @@ python manage.py runserver
 
 После запуска приложение доступно на `http://127.0.0.1:8000/`.
 
-## Упрощённый bootstrap
+## Быстрый bootstrap
 
-Если есть Bash, можно сократить шаги 2-5 одной командой:
+Если есть Bash, можно сократить подготовку окружения:
 
 ```bash
 bash bin/bootstrap_local.sh
@@ -113,7 +115,7 @@ bash bin/bootstrap_local.sh
 - ставит зависимости
 - создаёт `.env` из `.env.example`, если файла ещё нет
 
-После этого всё равно нужно заполнить `.env`, открыть SSH-туннель отдельной командой и только потом запускать Django.
+После этого всё равно нужно заполнить `.env`, открыть SSH-туннель и только потом запускать Django.
 
 ## Что лежит в `.env.example`
 
@@ -125,17 +127,38 @@ DB_HOST=127.0.0.1
 DB_PORT=6543
 ```
 
-Все `DB_*` значения обязательны. Если `.env` отсутствует или в нём не заполнены обязательные значения, Django завершится с понятной ошибкой на старте. Для `DB_PASSWORD` сообщение отдельное и явное.
+Все `DB_*` значения обязательны. Если `.env` отсутствует или в нём не заполнены обязательные значения, Django завершится с понятной ошибкой на старте.
+
+## Как теперь работает команда
+
+Обычный цикл:
+
+1. Сделать ветку от `main`
+2. Внести изменения локально
+3. Проверить проект локально
+4. Запушить ветку в GitHub
+5. Открыть Pull Request в `main`
+6. Дождаться зелёного CI
+7. Смерджить PR
+8. Дождаться автодеплоя
+
+CI запускается на каждый Pull Request в `main` и делает:
+
+- `python manage.py check`
+- `python manage.py test`
+
+После merge в `main` GitHub Actions автоматически запускает production deploy.
 
 ## Полезные команды
 
 ```bash
 python scripts/check_db.py
+python manage.py check
+python manage.py test
 python manage.py migrate
 python manage.py seed_mvp_data
 python manage.py create_local_user alice strongpass123 --email alice@example.com
 python manage.py runserver
-python manage.py test
 ```
 
 ## Структура проекта
@@ -145,3 +168,4 @@ python manage.py test
 - `common/` - общая инфраструктура
 - `scripts/` - служебные скрипты для локальной разработки
 - `bin/` - bootstrap-скрипты
+- `.github/workflows/` - CI и production deploy

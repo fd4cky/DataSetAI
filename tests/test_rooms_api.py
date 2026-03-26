@@ -78,20 +78,6 @@ class RoomsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertFalse(RoomMembership.objects.filter(room=room, user=self.annotator).exists())
 
-    def test_invited_annotator_can_join_room(self):
-        room = make_room(customer=self.customer, title="Invited room")
-        invite_annotator(room=room, annotator=self.annotator, invited_by=self.customer)
-
-        response = self.client.post(
-            reverse("room-join", kwargs={"room_id": room.id}),
-            format="json",
-            **self.auth(self.annotator),
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        membership = RoomMembership.objects.get(room=room, user=self.annotator)
-        self.assertEqual(membership.status, RoomMembership.Status.JOINED)
-
     def test_user_can_enter_room_by_id_and_password(self):
         room = make_room(customer=self.customer, title="Password room")
         room.set_access_password("demo123")

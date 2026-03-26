@@ -20,8 +20,8 @@
     --font-main: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
     --font-mono: "SFMono-Regular", "JetBrains Mono", monospace;
     --page-background:
-        radial-gradient(circle at top left, rgba(255, 213, 74, 0.44), transparent 24%),
-        radial-gradient(circle at bottom right, rgba(255, 201, 25, 0.22), transparent 32%),
+        radial-gradient(78rem 44rem at -10% -6%, rgba(255, 213, 74, 0.3) 0%, rgba(255, 213, 74, 0.18) 28%, rgba(255, 213, 74, 0.08) 46%, transparent 72%),
+        radial-gradient(72rem 40rem at 108% 10%, rgba(255, 201, 25, 0.18) 0%, rgba(255, 201, 25, 0.1) 26%, rgba(255, 201, 25, 0.04) 42%, transparent 68%),
         linear-gradient(180deg, #fbf8f1 0%, #efe8da 100%);
     --header-border: rgba(255, 255, 255, 0.7);
     --header-background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 224, 0.9));
@@ -63,8 +63,8 @@
     --accent-soft: rgba(255, 213, 74, 0.2);
     --shadow: 0 28px 84px rgba(0, 0, 0, 0.42);
     --page-background:
-        radial-gradient(circle at top left, rgba(255, 201, 25, 0.14), transparent 24%),
-        radial-gradient(circle at bottom right, rgba(255, 213, 74, 0.08), transparent 30%),
+        radial-gradient(78rem 46rem at -10% -4%, rgba(255, 201, 25, 0.12) 0%, rgba(255, 201, 25, 0.07) 32%, rgba(255, 201, 25, 0.03) 48%, transparent 74%),
+        radial-gradient(72rem 42rem at 108% 14%, rgba(255, 213, 74, 0.08) 0%, rgba(255, 213, 74, 0.04) 30%, rgba(255, 213, 74, 0.02) 44%, transparent 70%),
         linear-gradient(180deg, #171717 0%, #0f0f0f 100%);
     --header-border: rgba(255, 255, 255, 0.06);
     --header-background: linear-gradient(135deg, rgba(31, 31, 31, 0.94), rgba(20, 20, 20, 0.92));
@@ -100,13 +100,30 @@ html,
 body {
     margin: 0;
     min-height: 100%;
-    background: var(--page-background);
     color: var(--text);
     font-family: var(--font-main);
 }
 
+html {
+    background: var(--bg);
+}
+
 body {
     padding: 20px;
+    position: relative;
+    background: transparent;
+    z-index: 0;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: var(--page-background);
+    background-repeat: no-repeat;
+    background-size: cover;
+    z-index: -1;
+    pointer-events: none;
 }
 
 a {
@@ -690,6 +707,14 @@ textarea:focus {
     overflow: hidden;
 }
 
+.room-card__id {
+    margin-bottom: 8px;
+    color: var(--text-soft);
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
 .room-card__meta,
 .room-card__footer {
     color: var(--text-soft);
@@ -746,6 +771,7 @@ textarea:focus {
 .auth-page {
     display: flex;
     justify-content: center;
+    padding: 28px 0 12px;
 }
 
 .auth-card {

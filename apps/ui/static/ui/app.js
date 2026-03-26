@@ -296,10 +296,12 @@ function initRoomsPage() {
         (room) => `
           <article class="room-card" data-room-id="${room.id}">
             <div>
+              <div class="room-card__id">Комната #${room.id}</div>
               <div class="room-card__title">${room.title}</div>
               <div class="room-card__meta">${room.description || "Описание пока не добавлено."}</div>
             </div>
             <div class="room-card__footer">
+              <div>ID: ${room.id}</div>
               <div>Статус: ${translateMembership(room.membership_status || "owner")}</div>
               <div>Роль в комнате: ${room.membership_status === "owner" ? "Заказчик" : "Исполнитель"}</div>
               <div>Прогресс: ${formatPercent(room.progress_percent)}</div>
@@ -492,6 +494,7 @@ function initRoomDetailPage() {
     subtitle.textContent = dashboard.room.description || "Описание для этой комнаты пока не заполнено.";
     roomHeaderMeta.innerHTML = `
       <div class="summary-stack">
+        <div class="summary-row"><span>ID комнаты</span><strong>#${dashboard.room.id}</strong></div>
         <div class="summary-row"><span>Датасет</span><strong>${dashboard.room.dataset_label || "Тестовый датасет"}</strong></div>
         <div class="summary-row"><span>Дедлайн</span><strong>${formatDate(dashboard.room.deadline)}</strong></div>
         <div class="summary-row"><span>Доступ</span><strong>${dashboard.room.has_password ? "С паролем" : "Без пароля"}</strong></div>

@@ -768,6 +768,144 @@ input[type="file"]::-webkit-file-upload-button:hover {
     margin-top: 8px;
 }
 
+.page-topbar--room {
+    align-items: stretch;
+}
+
+.page-topbar--room .page-topbar__copy {
+    flex: 1 1 560px;
+    max-width: 760px;
+}
+
+.room-header-side {
+    flex: 0 1 720px;
+    width: min(100%, 720px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
+}
+
+.room-header-meta,
+.room-header-metrics {
+    min-width: 0;
+}
+
+.room-header-meta__stack {
+    width: 100%;
+}
+
+.room-header-metrics {
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+.room-progress-chart {
+    width: 100%;
+    height: 100%;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--surface);
+    backdrop-filter: blur(16px);
+    display: grid;
+    grid-template-columns: minmax(160px, 200px) minmax(180px, 1fr);
+    gap: 18px;
+    align-items: center;
+}
+
+.room-progress-chart__visual {
+    position: relative;
+    width: 100%;
+    max-width: 200px;
+    margin: 0 auto;
+}
+
+.room-progress-chart__svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    transform: rotate(-90deg);
+}
+
+.room-progress-chart__track,
+.room-progress-chart__value {
+    fill: none;
+    stroke-width: 12;
+}
+
+.room-progress-chart__track {
+    stroke: var(--activity-cell-background);
+}
+
+.room-progress-chart__value {
+    stroke: var(--accent-strong);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 220ms ease;
+}
+
+.room-progress-chart__center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+}
+
+.room-progress-chart__center strong {
+    font-size: 2rem;
+    letter-spacing: -0.06em;
+}
+
+.room-progress-chart__center span {
+    color: var(--text-soft);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.room-progress-chart__legend {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding-right: 6px;
+    min-width: 0;
+    align-self: stretch;
+    justify-content: center;
+}
+
+.room-progress-chart__legend-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+    width: 100%;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    min-width: 0;
+}
+
+.room-progress-chart__legend-row span {
+    color: var(--text-soft);
+    min-width: 0;
+    line-height: 1.15;
+}
+
+.room-progress-chart__legend-row strong {
+    display: block;
+    font-size: clamp(1.35rem, 2.2vw, 1.9rem);
+    line-height: 1;
+    white-space: nowrap;
+    min-width: 0;
+    text-align: left;
+}
+
 .hero-card__stats {
     gap: 12px;
     width: min(480px, 100%);
@@ -1033,12 +1171,53 @@ input[type="file"]::-webkit-file-upload-button:hover {
     transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
+.room-card.is-pinned {
+    border-color: rgba(255, 201, 25, 0.4);
+    box-shadow: inset 0 0 0 1px rgba(255, 201, 25, 0.12);
+}
+
 .room-card:hover {
     transform: translateY(-2px);
     border-color: rgba(255, 201, 25, 0.56);
 }
 
+.room-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.room-card__pin {
+    border: 0;
+    border-radius: 999px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 38px;
+    background: var(--button-muted-background);
+    color: var(--text-soft);
+    font: inherit;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.room-card__pin:hover {
+    transform: translateY(-1px);
+}
+
+.room-card__pin[aria-pressed="true"] {
+    background: rgba(255, 201, 25, 0.18);
+    color: var(--text);
+}
+
 .room-card__title {
+    margin-top: 10px;
     font-size: 1.08rem;
     font-weight: 700;
     line-height: 1.3;
@@ -1049,7 +1228,6 @@ input[type="file"]::-webkit-file-upload-button:hover {
 }
 
 .room-card__id {
-    margin-bottom: 6px;
     color: var(--text-soft);
     font-size: 0.8rem;
     letter-spacing: 0.03em;
@@ -1105,6 +1283,97 @@ input[type="file"]::-webkit-file-upload-button:hover {
 .workspace-grid__main {
     flex: 1 1 auto;
     min-width: 0;
+}
+
+.workspace-grid__main--room-annotator {
+    flex: 1 1 540px;
+}
+
+.workspace-grid--room-top {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
+}
+
+.workspace-grid--room-top .workspace-grid__main,
+.workspace-grid--room-top .workspace-grid__side {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+}
+
+.workspace-grid--room-top .panel-card {
+    height: 100%;
+}
+
+.workspace-grid__side--room-controls {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 14px;
+    align-items: stretch;
+}
+
+.workspace-grid__side--stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
+}
+
+.workspace-grid__side--room-work {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+}
+
+.workspace-grid__side--room-work .panel-card {
+    flex: 1 1 auto;
+}
+
+.workspace-grid--owner-manage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-grid--owner-manage .workspace-grid__side--room-controls {
+    height: 100%;
+}
+
+.workspace-grid--owner-manage .workspace-grid__main--room-annotator {
+    height: 100%;
+}
+
+.workspace-grid--owner-manage .workspace-grid__side--room-controls .workspace-grid__side--stack {
+    min-height: 0;
+}
+
+.workspace-grid:not(.workspace-grid--owner-manage) #annotator-manage-side {
+    display: none !important;
+}
+
+.room-review-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+.room-review-grid__card {
+    min-width: 0;
+}
+
+.room-review-grid__card--scroll {
+    height: 540px;
+    display: flex;
+    flex-direction: column;
+}
+
+.annotators-list--scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .workspace-grid--single .workspace-grid__main {
@@ -1350,6 +1619,101 @@ input[type="file"]::-webkit-file-upload-button:hover {
     gap: 10px;
 }
 
+.review-task-detail {
+    gap: 12px;
+}
+
+.review-media-preview {
+    margin-top: 2px;
+}
+
+.review-comparison-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.review-comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.review-comparison-column {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.review-comparison-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.review-comparison-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.review-media-stage {
+    min-height: 0;
+    padding: 12px;
+    justify-content: center;
+}
+
+.review-media-overlay {
+    pointer-events: none;
+    cursor: default;
+}
+
+.review-media-bbox {
+    position: absolute;
+    border: 2px solid var(--bbox-color, #b8b8b8);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+    overflow: visible;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.review-media-bbox span {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    padding: 4px 8px;
+    border-radius: 10px 0 10px 0;
+    background: var(--bbox-color, #b8b8b8);
+    color: #ffffff;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.review-task-preview {
+    width: 100%;
+    max-height: 240px;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    background: var(--soft-panel-background);
+}
+
+.review-annotation-card {
+    padding: 12px;
+    border-radius: var(--radius-md);
+    background: var(--soft-panel-background);
+    border: 1px solid var(--line);
+}
+
+.review-annotation-card__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+    margin-bottom: 8px;
+    color: var(--text-soft);
+}
+
 .annotator-row {
     justify-content: space-between;
     align-items: center;
@@ -1391,6 +1755,14 @@ input[type="file"]::-webkit-file-upload-button:hover {
     margin-bottom: 12px;
 }
 
+.panel-search {
+    margin-bottom: 12px;
+}
+
+.panel-search input {
+    min-height: 52px;
+}
+
 .action-strip {
     gap: 10px;
     flex-wrap: wrap;
@@ -1408,6 +1780,13 @@ input[type="file"]::-webkit-file-upload-button:hover {
     align-self: flex-start;
     padding: 16px 24px;
     border-radius: 999px;
+}
+
+.action-strip .btn--workscreen-submit {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: 220px;
+    margin-left: auto;
 }
 
 .task-box,
@@ -1504,6 +1883,25 @@ input[type="file"]::-webkit-file-upload-button:hover {
     .workspace-grid__main {
         flex: 0 0 auto;
         width: 100%;
+        max-width: none;
+    }
+
+    .workspace-grid__side--stack {
+        grid-template-columns: 1fr;
+    }
+
+    .workspace-grid--room-top,
+    .room-review-grid,
+    .review-comparison-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .room-review-grid__card--scroll {
+        height: auto;
+    }
+
+    .annotators-list--scroll {
+        overflow: visible;
     }
 
     .page-topbar--rooms .page-topbar__copy {
@@ -1523,6 +1921,24 @@ input[type="file"]::-webkit-file-upload-button:hover {
         grid-template-columns: 1fr;
         gap: 12px;
         align-content: start;
+    }
+
+    .page-topbar--room .page-topbar__copy,
+    .room-header-side {
+        width: 100%;
+        max-width: none;
+    }
+
+    .room-header-side {
+        grid-template-columns: 1fr;
+    }
+
+    .room-header-metrics {
+        width: 100%;
+    }
+
+    .room-progress-chart {
+        grid-template-columns: 1fr;
     }
 
     .room-grid-section {
@@ -1897,6 +2313,15 @@ input[type="file"]::-webkit-file-upload-button:hover {
     flex-wrap: wrap;
 }
 
+.label-chip-list--static {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+}
+
 .label-chip {
     display: inline-flex;
     align-items: center;
@@ -1906,6 +2331,8 @@ input[type="file"]::-webkit-file-upload-button:hover {
     border: 1px solid var(--line);
     background: var(--field-background);
     color: var(--text);
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .label-chip i {
@@ -1953,18 +2380,44 @@ input[type="file"]::-webkit-file-upload-button:hover {
 
 .media-stage {
     min-height: 320px;
-    padding: 16px;
+    padding: 20px 22px 24px 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: auto;
+    scrollbar-gutter: stable both-edges;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 201, 25, 0.72) transparent;
     background: rgba(23, 23, 23, 0.04);
+}
+
+.media-stage::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.media-stage::-webkit-scrollbar-track {
+    background: transparent;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+}
+
+.media-stage::-webkit-scrollbar-thumb {
+    background: rgba(255, 201, 25, 0.72);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+}
+
+.media-stage::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .media-canvas {
     position: relative;
     display: inline-flex;
     max-width: 100%;
+    margin: 4px 6px 8px 4px;
 }
 
 .media-stage__asset {

@@ -2,7 +2,7 @@ import json
 
 from rest_framework import serializers
 
-from apps.rooms.models import Room, RoomLabel, RoomMembership
+from apps.rooms.models import Room, RoomLabel, RoomMembership, RoomPin
 from apps.rooms.services import get_supported_export_formats, validate_dataset_upload
 from common.exceptions import ConflictError
 
@@ -125,6 +125,7 @@ class RoomSerializer(serializers.ModelSerializer):
     total_tasks = serializers.SerializerMethodField()
     completed_tasks = serializers.SerializerMethodField()
     progress_percent = serializers.SerializerMethodField()
+    is_pinned = serializers.SerializerMethodField()
     labels = RoomLabelSerializer(many=True, read_only=True)
     export_formats = serializers.SerializerMethodField()
 
@@ -146,6 +147,7 @@ class RoomSerializer(serializers.ModelSerializer):
             "total_tasks",
             "completed_tasks",
             "progress_percent",
+            "is_pinned",
             "labels",
             "export_formats",
             "created_at",
@@ -177,6 +179,17 @@ class RoomSerializer(serializers.ModelSerializer):
         if not total:
             return 0.0
         return round((completed / total) * 100, 1)
+
+    def get_is_pinned(self, obj):
+        if hasattr(obj, "is_pinned"):
+            return bool(obj.is_pinned)
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+
+        return RoomPin.objects.filter(room=obj, user=user).exists()
 
     def get_export_formats(self, obj):
         return get_supported_export_formats(room=obj)
@@ -212,3 +225,7 @@ class RoomAccessSerializer(serializers.Serializer):
 
 class RoomJoinSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True)
+
+
+class RoomPinSerializer(serializers.Serializer):
+    is_pinned = serializers.BooleanField()

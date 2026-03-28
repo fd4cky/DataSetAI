@@ -23,4 +23,5 @@ urlpatterns = [
     path("rooms/<int:room_id>/", RoomWorkspaceView.as_view(), name="ui-room-detail"),
     path("rooms/<int:room_id>/work/", RoomWorkView.as_view(), name="ui-room-work"),
     path("profile/", ProfileView.as_view(), name="ui-profile"),
+    path("users/<int:user_id>/profile/", ProfileView.as_view(), name="ui-user-profile"),
 ]

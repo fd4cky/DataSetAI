@@ -111,6 +111,7 @@ class AnnotationSerializer(serializers.ModelSerializer):
 class ReviewTaskListItemSerializer(serializers.ModelSerializer):
     source_file_url = serializers.SerializerMethodField()
     annotations_count = serializers.SerializerMethodField()
+    annotator_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -123,6 +124,7 @@ class ReviewTaskListItemSerializer(serializers.ModelSerializer):
             "source_name",
             "source_file_url",
             "annotations_count",
+            "annotator_ids",
             "updated_at",
         )
 
@@ -136,6 +138,9 @@ class ReviewTaskListItemSerializer(serializers.ModelSerializer):
 
     def get_annotations_count(self, obj):
         return obj.annotations.count()
+
+    def get_annotator_ids(self, obj):
+        return list(obj.annotations.order_by().values_list("annotator_id", flat=True).distinct())
 
 
 class ReviewTaskDetailSerializer(serializers.Serializer):

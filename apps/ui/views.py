@@ -41,6 +41,7 @@ class UiContextMixin:
         context["active_page"] = self.active_page
         context["page_key"] = self.page_key
         context["room_id"] = kwargs.get("room_id")
+        context["profile_user_id"] = kwargs.get("user_id")
         context["app_debug_mode"] = settings.APP_DEBUG_MODE
         context["auth_user_data"] = (
             {

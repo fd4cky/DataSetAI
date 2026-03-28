@@ -3,6 +3,7 @@ const authUser = JSON.parse(document.getElementById("auth-user-data").textConten
 const body = document.body;
 const currentPage = body.dataset.page;
 const currentRoomId = body.dataset.roomId ? Number(body.dataset.roomId) : null;
+const currentProfileUserId = body.dataset.profileUserId ? Number(body.dataset.profileUserId) : null;
 const appDebugMode = body.dataset.appDebugMode === "true";
 
 const roleLabels = {
@@ -53,6 +54,7 @@ const state = {
   roomDashboard: null,
   reviewTasks: [],
   selectedReviewTaskId: null,
+  selectedAnnotatorUserId: null,
   appDebugMode,
   theme: document.documentElement.dataset.theme || "light",
   pageRefresh: () => {},
@@ -400,6 +402,60 @@ function renderMetricCards(container, metrics) {
       </article>
     `)
     .join("");
+}
+
+function renderProfileCharts(container, overview) {
+  const roomSeries = [
+    { label: "Доступные", value: Number(overview.accessible_rooms_count || 0) },
+    { label: "Созданные", value: Number(overview.created_rooms_count || 0) },
+    { label: "Как исполнитель", value: Number(overview.joined_rooms_count || 0) },
+    { label: "Приглашения", value: Number(overview.invitations_count || 0) },
+  ];
+  const workSeries = [
+    { label: "Размечено", value: Number(overview.completed_tasks || 0) },
+    { label: "В работе", value: Number(overview.in_progress_tasks || 0) },
+  ];
+
+  const renderChartRows = (series) => {
+    const maxValue = Math.max(...series.map((item) => item.value), 0);
+    return series
+      .map((item) => {
+        const ratio = maxValue > 0 ? item.value / maxValue : 0;
+        return `
+          <div class="profile-chart-card__row">
+            <div class="profile-chart-card__meta">
+              <span>${item.label}</span>
+              <strong>${item.value}</strong>
+            </div>
+            <div class="profile-chart-card__track">
+              <div class="profile-chart-card__fill" style="width: ${Math.max(ratio * 100, item.value > 0 ? 8 : 0)}%"></div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  };
+
+  container.innerHTML = `
+    <article class="profile-chart-card">
+      <div class="profile-chart-card__head">
+        <span>Комнаты</span>
+        <strong>${roomSeries[0].value}</strong>
+      </div>
+      <div class="profile-chart-card__rows">
+        ${renderChartRows(roomSeries)}
+      </div>
+    </article>
+    <article class="profile-chart-card">
+      <div class="profile-chart-card__head">
+        <span>Работа</span>
+        <strong>${workSeries[0].value + workSeries[1].value}</strong>
+      </div>
+      <div class="profile-chart-card__rows">
+        ${renderChartRows(workSeries)}
+      </div>
+    </article>
+  `;
 }
 
 function renderRoomProgressChart(container, overview) {
@@ -811,20 +867,18 @@ function initProfilePage() {
   const metrics = document.getElementById("profile-metrics");
   const summary = document.getElementById("profile-summary");
   const activity = document.getElementById("profile-activity");
+  const profileUserId = currentProfileUserId || state.user?.id || null;
 
   state.pageRefresh = async () => {
-    if (!state.user) {
+    if (!state.user || !profileUserId) {
       return;
     }
 
     try {
-      const profile = await api("/api/v1/me/profile/");
-      renderMetricCards(metrics, [
-        { label: "Доступные комнаты", value: profile.overview.accessible_rooms_count },
-        { label: "Создано комнат", value: profile.overview.created_rooms_count },
-        { label: "Размечено", value: profile.overview.completed_tasks },
-        { label: "В работе", value: profile.overview.in_progress_tasks },
-      ]);
+      const profile = await api(
+        profileUserId === state.user.id ? "/api/v1/me/profile/" : `/api/v1/users/${profileUserId}/profile/`
+      );
+      renderProfileCharts(metrics, profile.overview);
 
       renderSummaryRows(summary, [
         { label: "Пользователь", value: `#${profile.id} ${profile.username}` },
@@ -1580,20 +1634,23 @@ function initRoomDetailPage() {
 
     if (!dashboard.annotators?.length) {
       annotatorsList.innerHTML = '<div class="empty-card">В этой комнате пока нет исполнителей.</div>';
+      state.selectedAnnotatorUserId = null;
       renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, null);
       return;
     }
 
     if (!filteredAnnotators.length) {
       annotatorsList.innerHTML = '<div class="empty-card">По этому запросу исполнители не найдены.</div>';
-      renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, null);
+      if (!state.selectedAnnotatorUserId) {
+        renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, null);
+      }
       return;
     }
 
     annotatorsList.innerHTML = filteredAnnotators
       .map(
-        (annotator, index) => `
-          <button class="annotator-row ${index === 0 ? "is-active" : ""}" type="button" data-user-id="${annotator.user_id}">
+        (annotator) => `
+          <button class="annotator-row ${annotator.user_id === state.selectedAnnotatorUserId ? "is-active" : ""}" type="button" data-user-id="${annotator.user_id}">
             <div class="annotator-row__meta">
               <strong>${annotator.username}</strong>
               <span>${translateMembership(annotator.status)}</span>
@@ -1607,22 +1664,27 @@ function initRoomDetailPage() {
       )
       .join("");
 
-    const setAnnotator = (annotator) => {
-      renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, annotator);
-      annotatorsList.querySelectorAll(".annotator-row").forEach((row) => {
-        row.classList.toggle("is-active", Number(row.dataset.userId) === annotator.user_id);
-      });
-    };
+    const activeAnnotator = filteredAnnotators.find((item) => item.user_id === state.selectedAnnotatorUserId) || null;
 
-    const activeAnnotator =
-      filteredAnnotators.find((item) => item.user_id === Number(annotatorDetailPanel.dataset.userId)) || filteredAnnotators[0];
-    annotatorDetailPanel.dataset.userId = String(activeAnnotator.user_id);
-    setAnnotator(activeAnnotator);
+    if (activeAnnotator) {
+      annotatorDetailPanel.dataset.userId = String(activeAnnotator.user_id);
+      renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, activeAnnotator);
+    } else {
+      delete annotatorDetailPanel.dataset.userId;
+      renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, null);
+    }
+
     annotatorsList.querySelectorAll(".annotator-row").forEach((row) => {
-      row.addEventListener("click", () => {
+      row.addEventListener("click", async () => {
         const annotator = filteredAnnotators.find((item) => item.user_id === Number(row.dataset.userId));
-        annotatorDetailPanel.dataset.userId = String(annotator.user_id);
-        setAnnotator(annotator);
+        if (!annotator) {
+          return;
+        }
+
+        state.selectedAnnotatorUserId =
+          state.selectedAnnotatorUserId === annotator.user_id ? null : annotator.user_id;
+        renderCustomerView(dashboard);
+        await loadReviewTasks();
       });
     });
   }
@@ -1652,6 +1714,14 @@ function initRoomDetailPage() {
 
     const searchTerm = normalizeSearchValue(reviewSearchInput?.value);
     const filteredTasks = state.reviewTasks.filter((task) => {
+      const matchesAnnotator =
+        !state.selectedAnnotatorUserId ||
+        (task.annotator_ids || []).includes(state.selectedAnnotatorUserId);
+
+      if (!matchesAnnotator) {
+        return false;
+      }
+
       if (!searchTerm) {
         return true;
       }

@@ -23,11 +23,21 @@ from apps.rooms.selectors import (
 )
 from apps.rooms.services import create_room, export_room_annotations, invite_user_to_room, join_room, set_room_pinned
 
+"""
+Rooms API surface.
+
+Important split:
+- RoomAccessView is the "enter room by id/password" flow used by the UI
+- RoomJoinView is the explicit join endpoint for already visible rooms
+"""
+
 
 ROOM_CREATE_LIST_FIELDS = {"annotator_ids", "dataset_files"}
 
 
 def _build_room_create_payload(request):
+    # Multipart room creation sends repeated keys (annotator_ids, dataset_files).
+    # Normalizing them here keeps serializers independent from request encoding.
     if hasattr(request.data, "lists"):
         data = {}
         for key, values in request.data.lists():
@@ -123,6 +133,8 @@ class RoomAccessView(APIView):
         room = get_room_by_id(room_id=serializer.validated_data["room_id"])
         password = serializer.validated_data.get("password", "")
 
+        # Access flow can create/update membership for a non-owner after password
+        # validation. Owners bypass membership handling and go straight to room UI.
         if room.created_by_id != request.user.id:
             membership = join_room(room=room, annotator=request.user, password=password)
             return Response(
@@ -145,6 +157,8 @@ class RoomJoinView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, room_id: int):
+        # Join flow is intentionally stricter than RoomAccessView: the room must
+        # already be visible to the actor (owner or invited member).
         room = get_visible_room(room_id=room_id, user=request.user)
         serializer = RoomJoinSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

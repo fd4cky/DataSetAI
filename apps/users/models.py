@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+"""Custom user model kept intentionally small for the MVP."""
+
 
 class User(AbstractUser):
     class Role(models.TextChoices):

@@ -2,6 +2,14 @@ from django.contrib.auth import get_user_model
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
+"""
+Custom auth used by the MVP API.
+
+The frontend can authenticate requests with `X-User-Id` when session auth is
+not available or would be inconvenient during manual testing. This is not meant
+to replace full Django auth forever, but many API views already rely on it.
+"""
+
 
 class HeaderUserAuthentication(BaseAuthentication):
     header_name = "HTTP_X_USER_ID"

@@ -11,6 +11,15 @@ from apps.rooms.services import get_supported_export_formats
 from apps.users.models import User
 from common.exceptions import NotFoundError
 
+"""
+Read-model helpers for the rooms domain.
+
+Convention in this project:
+- selectors only read/query/shape data
+- services mutate state and enforce write-side business rules
+- API views should stay thin and delegate to selectors/services
+"""
+
 
 def list_owned_rooms(*, user: User) -> QuerySet[Room]:
     pinned_subquery = RoomPin.objects.filter(room_id=OuterRef("pk"), user=user)
@@ -50,6 +59,8 @@ def get_room_by_id(*, room_id: int) -> Room:
 
 
 def get_visible_room(*, room_id: int, user: User) -> Room:
+    # Hidden rooms intentionally resolve to 404 instead of 403 so the caller
+    # cannot distinguish "exists but forbidden" from "does not exist".
     room = get_room_by_id(room_id=room_id)
     if room.created_by_id == user.id:
         return room
@@ -81,6 +92,8 @@ def build_activity_series(*, annotations_qs, days: int = 49) -> list[dict]:
 
 
 def build_room_dashboard(*, room: Room, actor: User) -> dict:
+    # Dashboard payload is intentionally assembled here instead of serializers:
+    # it mixes room metadata, aggregate stats and actor-specific slices.
     total_tasks = Task.objects.filter(room=room).count()
     completed_tasks = Task.objects.filter(room=room, status=Task.Status.SUBMITTED).count()
     remaining_tasks = max(total_tasks - completed_tasks, 0)

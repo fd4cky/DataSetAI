@@ -14,6 +14,12 @@ from apps.labeling.selectors import get_task_for_owner_review, get_task_or_404
 from apps.labeling.services import get_next_task_for_annotator, reject_task_annotation, submit_annotation
 from apps.rooms.selectors import get_room_for_owner, get_visible_room
 
+"""
+Labeling endpoints used by the annotator workflow:
+- ask for the next available task in a room
+- submit an annotation for an assigned task
+"""
+
 
 class RoomNextTaskView(APIView):
     permission_classes = [IsAuthenticated]

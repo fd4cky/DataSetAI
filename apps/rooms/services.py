@@ -1,10 +1,14 @@
 import io
 import json
+import shutil
+import subprocess
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from itertools import cycle
 from pathlib import Path
 
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 
@@ -52,7 +56,7 @@ def get_supported_export_formats(*, room: Room) -> list[dict[str, str]]:
     formats = [
         {"value": "native_json", "label": "Native JSON"},
     ]
-    if room.dataset_type == Room.DatasetType.IMAGE:
+    if room.dataset_type in (Room.DatasetType.IMAGE, Room.DatasetType.VIDEO):
         formats.extend(
             [
                 {"value": "coco_json", "label": "COCO JSON"},
@@ -69,6 +73,9 @@ def create_room(
     description: str = "",
     password: str = "",
     deadline=None,
+    cross_validation_enabled: bool = False,
+    cross_validation_annotators_count: int = 1,
+    cross_validation_similarity_threshold: int = 80,
     annotator_ids: list[int] | None = None,
     dataset_mode: str = "demo",
     test_task_count: int = 12,
@@ -91,6 +98,9 @@ def create_room(
             deadline=deadline,
             dataset_label=normalized_label,
             dataset_type=dataset_mode,
+            cross_validation_enabled=cross_validation_enabled,
+            cross_validation_annotators_count=cross_validation_annotators_count,
+            cross_validation_similarity_threshold=cross_validation_similarity_threshold,
         )
         room.set_access_password(password)
         room.save()
@@ -270,22 +280,31 @@ def _create_media_tasks(
     source_type: str,
 ) -> None:
     manifest_by_name = {item["name"]: item for item in media_manifest if item.get("name")}
+    next_item_number = 1
 
-    for index, dataset_file in enumerate(dataset_files):
+    for dataset_file in dataset_files:
         file_name = Path(dataset_file.name).name
         metadata = manifest_by_name.get(file_name, {})
+
+        if source_type == Task.SourceType.VIDEO:
+            next_item_number = _create_video_frame_tasks(
+                room=room,
+                dataset_label=dataset_label,
+                dataset_file=dataset_file,
+                metadata=metadata,
+                start_item_number=next_item_number,
+            )
+            continue
+
         input_payload = {
             "dataset": dataset_label,
-            "item_number": index + 1,
+            "item_number": next_item_number,
             "source_name": file_name,
         }
         if metadata.get("width"):
             input_payload["width"] = metadata["width"]
         if metadata.get("height"):
             input_payload["height"] = metadata["height"]
-        if source_type == Task.SourceType.VIDEO:
-            input_payload["duration"] = metadata.get("duration") or 0
-            input_payload["frame_rate"] = metadata.get("frame_rate") or 25
 
         Task.objects.create(
             room=room,
@@ -294,6 +313,87 @@ def _create_media_tasks(
             source_file=dataset_file,
             input_payload=input_payload,
         )
+        next_item_number += 1
+
+
+def _create_video_frame_tasks(
+    *,
+    room: Room,
+    dataset_label: str,
+    dataset_file,
+    metadata: dict,
+    start_item_number: int,
+) -> int:
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        raise ConflictError("FFmpeg is required to import video datasets.")
+
+    video_name = Path(dataset_file.name).name
+    frame_rate = int(metadata.get("frame_rate") or 25)
+    width = metadata.get("width")
+    height = metadata.get("height")
+    duration = metadata.get("duration") or 0
+
+    with tempfile.TemporaryDirectory(prefix="datasetai_video_") as temp_dir:
+        input_path = Path(temp_dir) / video_name
+        with input_path.open("wb") as input_handle:
+            for chunk in dataset_file.chunks():
+                input_handle.write(chunk)
+
+        frame_dir = Path(temp_dir) / "frames"
+        frame_dir.mkdir(parents=True, exist_ok=True)
+        frame_pattern = frame_dir / "frame_%06d.jpg"
+
+        try:
+            subprocess.run(
+                [
+                    ffmpeg_path,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(input_path),
+                    "-vsync",
+                    "0",
+                    str(frame_pattern),
+                ],
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            error_message = exc.stderr.decode("utf-8", errors="ignore").strip() or "Failed to extract video frames."
+            raise ConflictError(f"Не удалось разбить видео {video_name} на кадры: {error_message}") from exc
+
+        frame_paths = sorted(frame_dir.glob("frame_*.jpg"))
+        if not frame_paths:
+            raise ConflictError(f"Видео {video_name} не содержит кадров для разметки.")
+
+        next_item_number = start_item_number
+        for frame_index, frame_path in enumerate(frame_paths, start=1):
+            frame_name = f"{Path(video_name).stem}_frame_{frame_index:06d}.jpg"
+            frame_task = Task(
+                room=room,
+                source_type=Task.SourceType.IMAGE,
+                source_name=frame_name,
+                input_payload={
+                    "dataset": dataset_label,
+                    "item_number": next_item_number,
+                    "source_name": frame_name,
+                    "origin_source_type": Task.SourceType.VIDEO,
+                    "video_name": video_name,
+                    "frame_number": frame_index,
+                    "frame_rate": frame_rate,
+                    "frame_timestamp": round((frame_index - 1) / frame_rate, 3),
+                    "duration": duration,
+                    **({"width": width} if width else {}),
+                    **({"height": height} if height else {}),
+                },
+            )
+            frame_task.source_file.save(frame_name, ContentFile(frame_path.read_bytes()), save=False)
+            frame_task.save()
+            next_item_number += 1
+
+        return next_item_number
 
 
 def validate_dataset_upload(*, dataset_mode: str, dataset_files: list) -> None:
@@ -346,7 +446,8 @@ def _build_native_export(*, room: Room, tasks, labels, base_url: str | None) -> 
                 "source_name": task.source_name,
                 "source_url": source_url,
                 "input_payload": task.input_payload,
-                "annotation": task.annotation.result_payload if hasattr(task, "annotation") else None,
+                "annotation": _get_export_annotation_payload(task),
+                "validation_score": task.validation_score,
             }
         )
 
@@ -358,8 +459,8 @@ def _build_native_export(*, room: Room, tasks, labels, base_url: str | None) -> 
 
 
 def _build_coco_export(*, room: Room, tasks, labels) -> ExportArtifact:
-    if room.dataset_type != Room.DatasetType.IMAGE:
-        raise ConflictError("COCO export is available only for image datasets.")
+    if room.dataset_type not in (Room.DatasetType.IMAGE, Room.DatasetType.VIDEO):
+        raise ConflictError("COCO export is available only for image or video-frame datasets.")
 
     annotations = []
     images = []
@@ -377,10 +478,11 @@ def _build_coco_export(*, room: Room, tasks, labels) -> ExportArtifact:
             }
         )
 
-        if not hasattr(task, "annotation"):
+        annotation_payload = _get_export_annotation_payload(task)
+        if not annotation_payload:
             continue
 
-        for item in task.annotation.result_payload.get("annotations", []):
+        for item in annotation_payload.get("annotations", []):
             x_min, y_min, x_max, y_max = item["points"]
             width_value = max(x_max - x_min, 0)
             height_value = max(y_max - y_min, 0)
@@ -420,8 +522,8 @@ def _build_coco_export(*, room: Room, tasks, labels) -> ExportArtifact:
 
 
 def _build_yolo_export(*, room: Room, tasks, labels) -> ExportArtifact:
-    if room.dataset_type != Room.DatasetType.IMAGE:
-        raise ConflictError("YOLO export is available only for image datasets.")
+    if room.dataset_type not in (Room.DatasetType.IMAGE, Room.DatasetType.VIDEO):
+        raise ConflictError("YOLO export is available only for image or video-frame datasets.")
 
     label_order = {label.id: index for index, label in enumerate(labels)}
     buffer = io.BytesIO()
@@ -446,8 +548,9 @@ def _build_yolo_export(*, room: Room, tasks, labels) -> ExportArtifact:
             stem = Path(task.source_name or f"task_{task.id}").stem
             lines = []
 
-            if hasattr(task, "annotation") and width > 0 and height > 0:
-                for item in task.annotation.result_payload.get("annotations", []):
+            annotation_payload = _get_export_annotation_payload(task)
+            if annotation_payload and width > 0 and height > 0:
+                for item in annotation_payload.get("annotations", []):
                     x_min, y_min, x_max, y_max = item["points"]
                     box_width = max(x_max - x_min, 0)
                     box_height = max(y_max - y_min, 0)
@@ -475,7 +578,7 @@ def _build_yolo_export(*, room: Room, tasks, labels) -> ExportArtifact:
 
 
 def export_room_annotations(*, room: Room, export_format: str, base_url: str | None = None) -> ExportArtifact:
-    tasks = list(room.tasks.select_related("annotation").all())
+    tasks = list(room.tasks.filter(status=Task.Status.SUBMITTED).prefetch_related("annotations").all())
     labels = list(room.labels.all())
 
     if export_format == "native_json":
@@ -486,3 +589,13 @@ def export_room_annotations(*, room: Room, export_format: str, base_url: str | N
         return _build_yolo_export(room=room, tasks=tasks, labels=labels)
 
     raise NotFoundError("Unsupported export format.")
+
+
+def _get_export_annotation_payload(task: Task):
+    if task.status != Task.Status.SUBMITTED:
+        return None
+    if task.consensus_payload is not None:
+        return task.consensus_payload
+
+    latest_annotation = task.annotations.order_by("-submitted_at", "-id").first()
+    return latest_annotation.result_payload if latest_annotation else None

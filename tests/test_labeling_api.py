@@ -2,7 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.labeling.models import Annotation, Task
+from apps.labeling.models import Annotation, Task, TaskAssignment
 from apps.users.models import User
 from tests.factories import invite_annotator, make_room, make_task, make_user
 
@@ -41,7 +41,13 @@ class LabelingApiTests(APITestCase):
 
         self.task_1.refresh_from_db()
         self.assertEqual(self.task_1.status, Task.Status.IN_PROGRESS)
-        self.assertEqual(self.task_1.assigned_to_id, self.annotator.id)
+        self.assertTrue(
+            TaskAssignment.objects.filter(
+                task=self.task_1,
+                annotator=self.annotator,
+                status=TaskAssignment.Status.IN_PROGRESS,
+            ).exists()
+        )
 
     def test_annotator_can_submit_annotation(self):
         self.client.get(reverse("room-next-task", kwargs={"room_id": self.room.id}), **self.auth(self.annotator))
@@ -58,6 +64,53 @@ class LabelingApiTests(APITestCase):
 
         self.task_1.refresh_from_db()
         self.assertEqual(self.task_1.status, Task.Status.SUBMITTED)
+        self.assertEqual(
+            TaskAssignment.objects.get(task=self.task_1, annotator=self.annotator).status,
+            TaskAssignment.Status.SUBMITTED,
+        )
+
+    def test_cross_validation_requires_multiple_matching_annotations(self):
+        cross_room = make_room(
+            customer=self.customer,
+            title="Cross room",
+            cross_validation_enabled=True,
+            cross_validation_annotators_count=2,
+            cross_validation_similarity_threshold=80,
+        )
+        invite_annotator(room=cross_room, annotator=self.annotator, invited_by=self.customer, joined=True)
+        invite_annotator(room=cross_room, annotator=self.other_annotator, invited_by=self.customer, joined=True)
+        task = make_task(room=cross_room, payload={"text": "cross sample"})
+
+        self.client.get(reverse("room-next-task", kwargs={"room_id": cross_room.id}), **self.auth(self.annotator))
+        first_submit = self.client.post(
+            reverse("task-submit", kwargs={"task_id": task.id}),
+            {"result_payload": {"label": "positive"}},
+            format="json",
+            **self.auth(self.annotator),
+        )
+
+        self.assertEqual(first_submit.status_code, status.HTTP_201_CREATED)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.IN_PROGRESS)
+
+        second_next = self.client.get(
+            reverse("room-next-task", kwargs={"room_id": cross_room.id}),
+            **self.auth(self.other_annotator),
+        )
+        self.assertEqual(second_next.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_next.data["id"], task.id)
+
+        second_submit = self.client.post(
+            reverse("task-submit", kwargs={"task_id": task.id}),
+            {"result_payload": {"label": "positive"}},
+            format="json",
+            **self.auth(self.other_annotator),
+        )
+
+        self.assertEqual(second_submit.status_code, status.HTTP_201_CREATED)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.SUBMITTED)
+        self.assertGreaterEqual(task.validation_score, 80)
 
     def test_unjoined_annotator_cannot_get_next_task(self):
         response = self.client.get(

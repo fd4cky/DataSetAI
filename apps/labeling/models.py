@@ -23,6 +23,9 @@ class Task(TimeStampedModel):
     room = models.ForeignKey("rooms.Room", on_delete=models.CASCADE, related_name="tasks")
     input_payload = models.JSONField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    current_round = models.PositiveIntegerField(default=1)
+    validation_score = models.FloatField(null=True, blank=True)
+    consensus_payload = models.JSONField(null=True, blank=True)
     source_type = models.CharField(
         max_length=16,
         choices=SourceType.choices,
@@ -30,20 +33,11 @@ class Task(TimeStampedModel):
     )
     source_file = models.FileField(upload_to=task_source_upload_to, blank=True)
     source_name = models.CharField(max_length=255, blank=True)
-    assigned_to = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="assigned_tasks",
-    )
-    assigned_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("id",)
         indexes = [
             models.Index(fields=("room", "status")),
-            models.Index(fields=("assigned_to", "status")),
         ]
 
     def __str__(self) -> str:
@@ -51,7 +45,12 @@ class Task(TimeStampedModel):
 
 
 class Annotation(TimeStampedModel):
-    task = models.OneToOneField(Task, on_delete=models.CASCADE, related_name="annotation")
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="annotations")
+    assignment = models.OneToOneField(
+        "labeling.TaskAssignment",
+        on_delete=models.CASCADE,
+        related_name="annotation",
+    )
     annotator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -62,6 +61,40 @@ class Annotation(TimeStampedModel):
 
     class Meta:
         ordering = ("-submitted_at", "-id")
+        constraints = [
+            models.UniqueConstraint(fields=("task", "annotator"), name="unique_task_annotator_annotation"),
+        ]
 
     def __str__(self) -> str:
         return f"Annotation {self.id} for task {self.task_id}"
+
+
+class TaskAssignment(TimeStampedModel):
+    class Status(models.TextChoices):
+        IN_PROGRESS = "in_progress", "In progress"
+        SUBMITTED = "submitted", "Submitted"
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="assignments")
+    annotator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="task_assignments",
+    )
+    round_number = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.IN_PROGRESS)
+    assigned_at = models.DateTimeField()
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("task_id", "round_number", "annotator_id")
+        constraints = [
+            models.UniqueConstraint(fields=("task", "annotator"), name="unique_task_assignment_annotator"),
+        ]
+        indexes = [
+            models.Index(fields=("task", "status"), name="labeling_ta_task_st_4f3f33_idx"),
+            models.Index(fields=("annotator", "status"), name="labeling_ta_annota_86cd11_idx"),
+            models.Index(fields=("task", "round_number", "status"), name="labeling_ta_task_ro_217969_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Assignment task={self.task_id} annotator={self.annotator_id} round={self.round_number}"

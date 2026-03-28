@@ -71,6 +71,11 @@ class RoomDetailView(APIView):
         serializer = RoomSerializer(room, context={"request": request})
         return Response(serializer.data)
 
+    def delete(self, request, room_id: int):
+        room = get_room_for_owner(room_id=room_id, owner=request.user)
+        room.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class RoomDashboardView(APIView):
     permission_classes = [IsAuthenticated]

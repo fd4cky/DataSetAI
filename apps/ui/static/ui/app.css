@@ -294,6 +294,19 @@ textarea {
     font-size: 0.82rem;
 }
 
+.field--export-compact {
+    width: fit-content;
+    max-width: 100%;
+}
+
+.field--export-compact select {
+    width: auto;
+    min-width: 220px;
+    max-width: min(100%, 320px);
+    min-height: 58px;
+    padding: 16px 44px 16px 18px;
+}
+
 input,
 select,
 textarea {
@@ -312,6 +325,31 @@ select:focus,
 textarea:focus {
     border-color: rgba(255, 201, 25, 0.84);
     box-shadow: 0 0 0 5px rgba(255, 213, 74, 0.18);
+}
+
+input[type="file"] {
+    min-height: 54px;
+    padding: 8px;
+}
+
+input[type="file"]::file-selector-button,
+input[type="file"]::-webkit-file-upload-button {
+    border: 0;
+    border-radius: 16px;
+    padding: 14px 18px;
+    margin-right: 12px;
+    background: var(--button-muted-background);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 140ms ease, background 140ms ease;
+}
+
+input[type="file"]::file-selector-button:hover,
+input[type="file"]::-webkit-file-upload-button:hover {
+    transform: translateY(-1px);
+    background: var(--accent-soft);
 }
 
 .btn {
@@ -354,6 +392,12 @@ textarea:focus {
 .btn--secondary {
     background: var(--button-secondary-background);
     color: var(--button-secondary-text);
+}
+
+.btn--danger {
+    background: linear-gradient(180deg, #e05a3f 0%, #c43f24 100%);
+    color: #fff8f4;
+    box-shadow: 0 14px 28px rgba(214, 69, 40, 0.22);
 }
 
 .btn--compact {
@@ -550,6 +594,15 @@ textarea:focus {
 .hero-card__main p,
 .page-topbar__copy p {
     max-width: 60ch;
+}
+
+.room-header-meta__stack {
+    width: min(100%, 320px);
+}
+
+.room-header-meta__delete {
+    width: 100%;
+    margin-top: 8px;
 }
 
 .hero-card__stats {
@@ -976,6 +1029,44 @@ textarea:focus {
     grid-column: 1 / -1;
 }
 
+.field--checkbox {
+    gap: 8px;
+}
+
+.field--checkbox__control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 54px;
+    padding: 14px 16px;
+    border: 1px solid rgba(26, 26, 26, 0.1);
+    border-radius: 16px;
+    background: var(--field-background);
+}
+
+.field--checkbox__text {
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1.2;
+}
+
+.field--checkbox input[type="checkbox"] {
+    width: auto;
+    min-width: 22px;
+    min-height: 22px;
+    align-self: center;
+    margin: 0;
+    padding: 0;
+    border-radius: 8px;
+    flex: 0 0 auto;
+    box-shadow: none;
+}
+
+.field--checkbox > span {
+    margin: 0;
+}
+
 .dataset-box {
     margin-top: 14px;
     padding: 16px;
@@ -1145,6 +1236,15 @@ textarea:focus {
 
 .action-strip .btn {
     flex: 1 1 220px;
+}
+
+.action-strip .btn--workscreen-back {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: 0;
+    align-self: flex-start;
+    padding: 16px 24px;
+    border-radius: 999px;
 }
 
 .task-box,
@@ -1600,6 +1700,7 @@ textarea:focus {
     border-radius: 999px;
     border: 1px solid var(--line);
     background: var(--field-background);
+    color: var(--text);
 }
 
 .label-chip i {
@@ -1679,8 +1780,13 @@ textarea:focus {
     border: 2px solid var(--bbox-color, #b8b8b8);
     background: rgba(255, 255, 255, 0.04);
     border-radius: 10px;
-    cursor: pointer;
+    cursor: grab;
     padding: 0;
+    overflow: visible;
+}
+
+.media-bbox:active {
+    cursor: grabbing;
 }
 
 .media-bbox span {
@@ -1693,6 +1799,30 @@ textarea:focus {
     color: #ffffff;
     font-size: 0.78rem;
     white-space: nowrap;
+}
+
+.media-bbox__resize-handle {
+    position: absolute;
+    right: -8px;
+    bottom: -8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.96);
+    background: var(--bbox-color, #b8b8b8);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 140ms ease, transform 140ms ease;
+    cursor: nwse-resize;
+    z-index: 2;
+}
+
+.media-bbox:hover .media-bbox__resize-handle,
+.media-bbox:focus-visible .media-bbox__resize-handle,
+.media-bbox__resize-handle:hover {
+    opacity: 1;
+    transform: scale(1);
 }
 
 .media-bbox--draft {

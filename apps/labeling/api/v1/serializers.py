@@ -5,7 +5,6 @@ from apps.labeling.models import Annotation, Task
 
 class TaskSerializer(serializers.ModelSerializer):
     room_id = serializers.IntegerField(read_only=True)
-    assigned_to_id = serializers.IntegerField(read_only=True)
     source_file_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -14,12 +13,12 @@ class TaskSerializer(serializers.ModelSerializer):
             "id",
             "room_id",
             "status",
+            "current_round",
+            "validation_score",
             "input_payload",
             "source_type",
             "source_name",
             "source_file_url",
-            "assigned_to_id",
-            "assigned_at",
             "created_at",
             "updated_at",
         )
@@ -89,12 +88,14 @@ class AnnotationSubmitSerializer(serializers.Serializer):
 class AnnotationSerializer(serializers.ModelSerializer):
     task_id = serializers.IntegerField(read_only=True)
     annotator_id = serializers.IntegerField(read_only=True)
+    assignment_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Annotation
         fields = (
             "id",
             "task_id",
+            "assignment_id",
             "annotator_id",
             "result_payload",
             "submitted_at",

@@ -44,6 +44,9 @@ class RoomCreateSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
     deadline = serializers.DateTimeField(required=False, allow_null=True)
+    cross_validation_enabled = serializers.BooleanField(required=False, default=False)
+    cross_validation_annotators_count = serializers.IntegerField(required=False, min_value=1, max_value=20, default=1)
+    cross_validation_similarity_threshold = serializers.IntegerField(required=False, min_value=1, max_value=100, default=80)
     annotator_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         required=False,
@@ -62,6 +65,14 @@ class RoomCreateSerializer(serializers.Serializer):
     media_manifest = JsonStringField(required=False)
 
     def validate(self, attrs):
+        if attrs.get("cross_validation_enabled"):
+            if attrs.get("cross_validation_annotators_count", 1) < 2:
+                raise serializers.ValidationError(
+                    {"cross_validation_annotators_count": "Set at least 2 independent annotators for cross validation."}
+                )
+        else:
+            attrs["cross_validation_annotators_count"] = 1
+
         dataset_mode = attrs.get("dataset_mode", Room.DatasetType.DEMO)
         dataset_files = list(attrs.get("dataset_files") or [])
         labels = attrs.get("labels")
@@ -125,6 +136,9 @@ class RoomSerializer(serializers.ModelSerializer):
             "description",
             "dataset_label",
             "dataset_type",
+            "cross_validation_enabled",
+            "cross_validation_annotators_count",
+            "cross_validation_similarity_threshold",
             "deadline",
             "created_by_id",
             "membership_status",

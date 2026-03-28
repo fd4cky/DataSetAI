@@ -70,6 +70,14 @@ class RoomListCreateViewTests(TestCase):
         membership = RoomMembership.objects.get(room=room, user=annotator)
         self.assertEqual(membership.status, RoomMembership.Status.INVITED)
 
+    def test_owner_can_delete_room(self):
+        room = Room.objects.create(title="Delete me", created_by=self.user)
+
+        response = self.client.delete(f"/api/v1/rooms/{room.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Room.objects.filter(id=room.id).exists())
+
     @staticmethod
     def _uploaded_file(name: str):
         from django.core.files.uploadedfile import SimpleUploadedFile

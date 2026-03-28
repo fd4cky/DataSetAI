@@ -23,6 +23,9 @@ class Room(TimeStampedModel):
         choices=DatasetType.choices,
         default=DatasetType.DEMO,
     )
+    cross_validation_enabled = models.BooleanField(default=False)
+    cross_validation_annotators_count = models.PositiveSmallIntegerField(default=1)
+    cross_validation_similarity_threshold = models.PositiveSmallIntegerField(default=80)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -46,6 +49,12 @@ class Room(TimeStampedModel):
         if not self.access_password_hash:
             return True
         return check_password(raw_password or "", self.access_password_hash)
+
+    @property
+    def required_reviews_per_item(self) -> int:
+        if not self.cross_validation_enabled:
+            return 1
+        return max(1, self.cross_validation_annotators_count)
 
 
 class RoomLabel(TimeStampedModel):

@@ -242,16 +242,28 @@ function renderSummaryRows(container, rows) {
     .join("");
 }
 
+function parseDateString(dateString) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatUtcDate(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatMonthLabel(dateString) {
-  return new Intl.DateTimeFormat("ru-RU", { month: "short" })
-    .format(new Date(`${dateString}T00:00:00`))
+  return new Intl.DateTimeFormat("ru-RU", { month: "short", timeZone: "UTC" })
+    .format(parseDateString(dateString))
     .replace(".", "");
 }
 
 function shiftDateString(dateString, days) {
-  const date = new Date(`${dateString}T00:00:00`);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  const date = parseDateString(dateString);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatUtcDate(date);
 }
 
 function formatWeeksLabel(count) {
@@ -274,8 +286,8 @@ function buildActivityMonthLabels(series) {
   let previousMonthKey = null;
 
   series.forEach((item, index) => {
-    const date = new Date(`${item.date}T00:00:00`);
-    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    const date = parseDateString(item.date);
+    const monthKey = `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
     if (monthKey === previousMonthKey) {
       return;
     }
@@ -574,6 +586,9 @@ function initRoomCreatePage() {
   const labelEditorSection = document.getElementById("label-editor-section");
   const labelEditorList = document.getElementById("label-editor-list");
   const addLabelBtn = document.getElementById("add-label-btn");
+  const crossValidationToggle = document.getElementById("cross-validation-enabled");
+  const crossValidationCountInput = document.getElementById("cross-validation-count");
+  const crossValidationThresholdInput = document.getElementById("cross-validation-threshold");
 
   const datasetModeConfig = {
     demo: {
@@ -598,7 +613,7 @@ function initRoomCreatePage() {
       usesLabels: true,
     },
     video: {
-      hint: "Загрузи набор видеороликов. Исполнитель сможет поставить видео на паузу и размечать нужный кадр.",
+      hint: "Загрузи набор видеороликов. Каждое видео будет автоматически разбито на кадры, и каждый кадр станет отдельной задачей как обычное фото.",
       accept: "video/*",
       multiple: true,
       usesFiles: true,
@@ -662,7 +677,18 @@ function initRoomCreatePage() {
     }
   }
 
+  function syncCrossValidationSettings() {
+    const enabled = Boolean(crossValidationToggle?.checked);
+    if (crossValidationCountInput) {
+      crossValidationCountInput.disabled = !enabled;
+    }
+    if (crossValidationThresholdInput) {
+      crossValidationThresholdInput.disabled = !enabled;
+    }
+  }
+
   datasetModeSelect?.addEventListener("change", syncDatasetMode);
+  crossValidationToggle?.addEventListener("change", syncCrossValidationSettings);
   datasetFilesInput?.addEventListener("change", () => {
     datasetFilesSummary.textContent = summarizeSelectedFiles(Array.from(datasetFilesInput.files || []));
   });
@@ -684,6 +710,8 @@ function initRoomCreatePage() {
       .filter((item) => Number.isInteger(item) && item > 0);
     const deadlineValue = rawFormData.get("deadline");
     const labels = collectLabels();
+    const crossValidationEnabled = Boolean(crossValidationToggle?.checked);
+    const crossValidationCount = Number(rawFormData.get("cross_validation_annotators_count") || 1);
 
     if (datasetMode !== "demo" && !datasetFiles.length) {
       showFlash("Загрузи файл или набор файлов для выбранного типа датасета.", "error");
@@ -692,6 +720,11 @@ function initRoomCreatePage() {
 
     if ((datasetMode === "image" || datasetMode === "video") && !labels.length) {
       showFlash("Добавь хотя бы один лейбл для фото или видео.", "error");
+      return;
+    }
+
+    if (crossValidationEnabled && crossValidationCount < 2) {
+      showFlash("Для перекрестной разметки укажи минимум двух независимых исполнителей.", "error");
       return;
     }
 
@@ -710,6 +743,15 @@ function initRoomCreatePage() {
     payload.append("dataset_mode", datasetMode);
     payload.append("dataset_label", rawFormData.get("dataset_label") || "Тестовый датасет");
     payload.append("test_task_count", String(Number(rawFormData.get("test_task_count") || 12)));
+    payload.append("cross_validation_enabled", crossValidationEnabled ? "true" : "false");
+    payload.append(
+      "cross_validation_annotators_count",
+      String(Number(rawFormData.get("cross_validation_annotators_count") || 1))
+    );
+    payload.append(
+      "cross_validation_similarity_threshold",
+      String(Number(rawFormData.get("cross_validation_similarity_threshold") || 80))
+    );
     annotatorIds.forEach((annotatorId) => {
       payload.append("annotator_ids", String(annotatorId));
     });
@@ -741,8 +783,12 @@ function initRoomCreatePage() {
     }
   });
 
+  syncDatasetMode();
+  syncCrossValidationSettings();
+
   state.pageRefresh = async () => {
     syncDatasetMode();
+    syncCrossValidationSettings();
   };
 }
 
@@ -796,12 +842,17 @@ function renderRoomDashboardHeader(title, subtitle, roomHeaderMeta, roomMetrics,
   title.textContent = dashboard.room.title;
   subtitle.textContent = dashboard.room.description || "Описание для этой комнаты пока не заполнено.";
   roomHeaderMeta.innerHTML = `
-    <div class="summary-stack">
+    <div class="summary-stack room-header-meta__stack">
       <div class="summary-row"><span>ID комнаты</span><strong>#${dashboard.room.id}</strong></div>
       <div class="summary-row"><span>Датасет</span><strong>${dashboard.room.dataset_label || "Тестовый датасет"}</strong></div>
       <div class="summary-row"><span>Тип</span><strong>${translateDatasetMode(dashboard.room.dataset_type)}</strong></div>
       <div class="summary-row"><span>Дедлайн</span><strong>${formatDate(dashboard.room.deadline)}</strong></div>
       <div class="summary-row"><span>Доступ</span><strong>${dashboard.room.has_password ? "С паролем" : "Без пароля"}</strong></div>
+      ${
+        dashboard.actor.role === "customer"
+          ? '<button id="detail-delete-room-btn" class="btn btn--danger room-header-meta__delete" type="button">Удалить комнату</button>'
+          : ""
+      }
     </div>
   `;
 
@@ -910,6 +961,38 @@ function initRoomDetailPage() {
   const exportFormatSelect = document.getElementById("detail-export-format");
   const exportBtn = document.getElementById("detail-export-btn");
 
+  function bindDeleteRoomButton() {
+    const deleteRoomBtn = document.getElementById("detail-delete-room-btn");
+    deleteRoomBtn?.addEventListener("click", async () => {
+      clearFlash();
+      const shouldDelete = window.confirm(
+        "Удалить комнату? Это действие удалит саму комнату, задачи, участников и результаты разметки без возможности восстановления."
+      );
+      if (!shouldDelete) {
+        return;
+      }
+
+      try {
+        await api(`/api/v1/rooms/${currentRoomId}/`, { method: "DELETE" });
+        window.location.href = "/rooms/";
+      } catch (error) {
+        showFlash(error.message, "error");
+      }
+    });
+  }
+
+  function updateAnnotatorWorkAction(dashboard) {
+    const membershipStatus = dashboard.room.membership_status;
+    const isJoined = membershipStatus === "joined";
+
+    workBtn.disabled = false;
+    workBtn.dataset.action = isJoined ? "work" : "join";
+    workBtn.textContent = isJoined ? "Приступить к работе" : "Вступить в комнату";
+    workNote.textContent = isJoined
+      ? "Обзор комнаты открыт. Вход в комнату, получение задач и отправка результата доступны только в отдельной рабочей среде."
+      : "Ты приглашен в комнату. Сначала подтверди вступление, после этого кнопка переключится на переход в рабочую среду.";
+  }
+
   async function loadDashboard() {
     const dashboard = await api(`/api/v1/rooms/${currentRoomId}/dashboard/`);
     state.roomDashboard = dashboard;
@@ -921,16 +1004,14 @@ function initRoomDetailPage() {
       annotatorWorkspace.classList.remove("hidden");
 
       renderAnnotatorOverview(annotatorSummary, annotatorActivity, dashboard);
-
-      workBtn.disabled = false;
-      workBtn.textContent = "Приступить к работе";
-      workNote.textContent = "Обзор комнаты открыт. Вход в комнату, получение задач и отправка результата доступны только в отдельной рабочей среде.";
+      updateAnnotatorWorkAction(dashboard);
       return;
     }
 
     annotatorWorkspace.classList.add("hidden");
     customerWorkspace.classList.remove("hidden");
     renderCustomerView(dashboard);
+    bindDeleteRoomButton();
   }
 
   function renderCustomerView(dashboard) {
@@ -1003,8 +1084,19 @@ function initRoomDetailPage() {
     }
   });
 
-  workBtn?.addEventListener("click", () => {
+  workBtn?.addEventListener("click", async () => {
     clearFlash();
+    if (workBtn.dataset.action === "join") {
+      try {
+        await api(`/api/v1/rooms/${currentRoomId}/join/`, { method: "POST", body: {} });
+        showFlash("Ты вступил в комнату. Теперь можно переходить к задачам.", "success");
+        await loadDashboard();
+      } catch (error) {
+        showFlash(error.message, "error");
+      }
+      return;
+    }
+
     window.location.href = `/rooms/${currentRoomId}/work/`;
   });
 
@@ -1050,8 +1142,15 @@ function createMediaAnnotationEditor({
     overlayElement: null,
     draftElement: null,
     draftStart: null,
+    dragState: null,
+    resizeState: null,
+    suppressLabelClickUntil: 0,
     eventsAttached: false,
   };
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
 
   function getLabels() {
     return state.roomDashboard?.labels || [];
@@ -1083,7 +1182,7 @@ function createMediaAnnotationEditor({
     editor.activeLabelId = labelId;
     const label = getLabelById(labelId);
     activeLabelNote.textContent = label
-      ? `Активный label: ${label.name}. Клик по области назначит его.`
+      ? `Активный label: ${label.name}. Новые выделения получат его сразу, зажатие перемещает область, нижний правый угол меняет размер, а одиночный клик меняет ее label на активный.`
       : "Активный label пока не выбран.";
 
     labelPalette.querySelectorAll("[data-label-id]").forEach((button) => {
@@ -1123,6 +1222,9 @@ function createMediaAnnotationEditor({
   }
 
   function updateSubmitState() {
+    if (!submitBtn) {
+      return;
+    }
     submitBtn.disabled = !state.currentTask || editor.annotations.some((annotation) => !annotation.label_id);
   }
 
@@ -1134,6 +1236,10 @@ function createMediaAnnotationEditor({
   function removeAnnotation(localId) {
     editor.annotations = editor.annotations.filter((annotation) => annotation.local_id !== localId);
     render();
+  }
+
+  function updateClearButtonVisibility() {
+    clearBtn?.classList.toggle("hidden", !editor.annotations.length);
   }
 
   function renderAnnotationList() {
@@ -1228,10 +1334,22 @@ function createMediaAnnotationEditor({
         button.style.width = `${Math.max((xMax - xMin) * scaleX, 1)}px`;
         button.style.height = `${Math.max((yMax - yMin) * scaleY, 1)}px`;
         button.style.setProperty("--bbox-color", label?.color || "#B8B8B8");
-        button.innerHTML = `<span>${label ? label.name : "Без лейбла"}</span>`;
+        button.innerHTML = `
+          <span>${label ? label.name : "Без лейбла"}</span>
+          <i class="media-bbox__resize-handle" aria-hidden="true"></i>
+        `;
+        button.addEventListener("mousedown", (event) => {
+          startDragging(event, annotation);
+        });
+        button.querySelector(".media-bbox__resize-handle")?.addEventListener("mousedown", (event) => {
+          startResizing(event, annotation);
+        });
         button.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (Date.now() < editor.suppressLabelClickUntil) {
+            return;
+          }
           if (!editor.activeLabelId) {
             showFlash("Сначала выбери label.", "error");
             return;
@@ -1244,6 +1362,7 @@ function createMediaAnnotationEditor({
   }
 
   function render() {
+    updateClearButtonVisibility();
     renderPalette();
     renderBoxes();
     renderAnnotationList();
@@ -1254,6 +1373,48 @@ function createMediaAnnotationEditor({
     editor.draftElement?.remove();
     editor.draftElement = null;
     editor.draftStart = null;
+  }
+
+  function startDragging(event, annotation) {
+    if (event.button !== 0 || !editor.overlayElement) {
+      return;
+    }
+
+    if (state.currentTask?.source_type === "video" && editor.mediaElement && !editor.mediaElement.paused) {
+      showFlash("Поставь видео на паузу перед перемещением области.", "error");
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    editor.dragState = {
+      annotation,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      originalPoints: [...annotation.points],
+      moved: false,
+    };
+  }
+
+  function startResizing(event, annotation) {
+    if (event.button !== 0 || !editor.overlayElement) {
+      return;
+    }
+
+    if (state.currentTask?.source_type === "video" && editor.mediaElement && !editor.mediaElement.paused) {
+      showFlash("Поставь видео на паузу перед изменением размера области.", "error");
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    editor.resizeState = {
+      annotation,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      originalPoints: [...annotation.points],
+      moved: false,
+    };
   }
 
   function startDrawing(event) {
@@ -1277,6 +1438,68 @@ function createMediaAnnotationEditor({
   }
 
   function updateDraft(event) {
+    if (editor.resizeState && editor.overlayElement) {
+      const bounds = editor.overlayElement.getBoundingClientRect();
+      const naturalSize = getNaturalSize();
+      const scaleX = bounds.width > 0 ? naturalSize.width / bounds.width : 1;
+      const scaleY = bounds.height > 0 ? naturalSize.height / bounds.height : 1;
+      const deltaX = Math.round((event.clientX - editor.resizeState.startClientX) * scaleX);
+      const deltaY = Math.round((event.clientY - editor.resizeState.startClientY) * scaleY);
+      const [startXMin, startYMin, startXMax, startYMax] = editor.resizeState.originalPoints;
+      const minWidth = 8;
+      const minHeight = 8;
+      const maxWidth = Math.max((naturalSize.width || 0) - startXMin, minWidth);
+      const maxHeight = Math.max((naturalSize.height || 0) - startYMin, minHeight);
+      const nextWidth = clamp((startXMax - startXMin) + deltaX, minWidth, maxWidth);
+      const nextHeight = clamp((startYMax - startYMin) + deltaY, minHeight, maxHeight);
+
+      editor.resizeState.moved =
+        editor.resizeState.moved ||
+        Math.abs(event.clientX - editor.resizeState.startClientX) > 3 ||
+        Math.abs(event.clientY - editor.resizeState.startClientY) > 3;
+      editor.resizeState.annotation.points = [
+        startXMin,
+        startYMin,
+        startXMin + nextWidth,
+        startYMin + nextHeight,
+      ];
+      renderBoxes();
+      renderAnnotationList();
+      updateResultPreview();
+      return;
+    }
+
+    if (editor.dragState && editor.overlayElement) {
+      const bounds = editor.overlayElement.getBoundingClientRect();
+      const naturalSize = getNaturalSize();
+      const scaleX = bounds.width > 0 ? naturalSize.width / bounds.width : 1;
+      const scaleY = bounds.height > 0 ? naturalSize.height / bounds.height : 1;
+      const deltaX = Math.round((event.clientX - editor.dragState.startClientX) * scaleX);
+      const deltaY = Math.round((event.clientY - editor.dragState.startClientY) * scaleY);
+      const [startXMin, startYMin, startXMax, startYMax] = editor.dragState.originalPoints;
+      const boxWidth = startXMax - startXMin;
+      const boxHeight = startYMax - startYMin;
+      const maxX = Math.max((naturalSize.width || 0) - boxWidth, 0);
+      const maxY = Math.max((naturalSize.height || 0) - boxHeight, 0);
+      const nextXMin = clamp(startXMin + deltaX, 0, maxX);
+      const nextYMin = clamp(startYMin + deltaY, 0, maxY);
+
+      editor.dragState.moved =
+        editor.dragState.moved ||
+        Math.abs(event.clientX - editor.dragState.startClientX) > 3 ||
+        Math.abs(event.clientY - editor.dragState.startClientY) > 3;
+      editor.dragState.annotation.points = [
+        nextXMin,
+        nextYMin,
+        nextXMin + boxWidth,
+        nextYMin + boxHeight,
+      ];
+      renderBoxes();
+      renderAnnotationList();
+      updateResultPreview();
+      return;
+    }
+
     if (!editor.draftStart || !editor.draftElement || !editor.overlayElement) {
       return;
     }
@@ -1296,6 +1519,22 @@ function createMediaAnnotationEditor({
   }
 
   function finishDrawing(event) {
+    if (editor.resizeState) {
+      if (editor.resizeState.moved) {
+        editor.suppressLabelClickUntil = Date.now() + 150;
+      }
+      editor.resizeState = null;
+      return;
+    }
+
+    if (editor.dragState) {
+      if (editor.dragState.moved) {
+        editor.suppressLabelClickUntil = Date.now() + 150;
+      }
+      editor.dragState = null;
+      return;
+    }
+
     if (!editor.draftStart || !editor.overlayElement) {
       return;
     }
@@ -1316,7 +1555,7 @@ function createMediaAnnotationEditor({
       editor.annotations.push({
         local_id: `${Date.now()}-${Math.random()}`,
         type: "bbox",
-        label_id: null,
+        label_id: editor.activeLabelId,
         points: [
           Math.round(left * xScale),
           Math.round(top * yScale),
@@ -1366,6 +1605,8 @@ function createMediaAnnotationEditor({
     editor.mediaElement = null;
     editor.overlayElement = null;
     clearDraft();
+    editor.dragState = null;
+    editor.resizeState = null;
     mediaTool.classList.add("hidden");
     mediaStage.className = "media-stage empty-card";
     mediaStage.textContent = "Файл задачи загрузится после выбора задания.";
@@ -1383,8 +1624,8 @@ function createMediaAnnotationEditor({
     mediaTool.classList.remove("hidden");
     instructions.textContent =
       task.source_type === "video"
-        ? "Поставь видео на паузу на нужном кадре, зажми левую кнопку мыши и выдели область. После этого кликни по области, чтобы назначить активный label."
-        : "Зажми левую кнопку мыши и выдели область. Потом кликни по области один раз, чтобы назначить активный label.";
+        ? "Поставь видео на паузу на нужном кадре, зажми левую кнопку мыши и выдели область. Новое выделение сразу получит активный label. Зажми существующую область, чтобы переместить ее, потяни за правый нижний угол, чтобы изменить размер, или выбери другой label и кликни по области один раз, чтобы поменять label."
+        : "Зажми левую кнопку мыши и выдели область. Новое выделение сразу получит активный label. Зажми существующую область, чтобы переместить ее, потяни за правый нижний угол, чтобы изменить размер, или выбери другой label и кликни по области один раз, чтобы поменять label.";
     resultLabel.textContent = "Результат bbox-разметки";
     resultJson.readOnly = true;
     editor.annotations = [];
@@ -1439,7 +1680,6 @@ function initRoomWorkPage() {
   }
 
   const joinBtn = document.getElementById("work-join-btn");
-  const nextTaskBtn = document.getElementById("work-next-task-btn");
   const taskBox = document.getElementById("work-task-box");
   const submitForm = document.getElementById("work-submit-form");
   const resultJson = document.getElementById("work-result-json");
@@ -1491,7 +1731,24 @@ function initRoomWorkPage() {
       null,
       2
     );
-    submitBtn.disabled = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+    }
+  }
+
+  async function loadNextTask({ emptyMessage }) {
+    const task = await api(`/api/v1/rooms/${currentRoomId}/tasks/next/`);
+    state.currentTask = task;
+    prepareTaskForm(task);
+
+    if (!task) {
+      renderEmptyTaskBox(taskBox, emptyMessage || "Доступных задач больше нет.");
+      if (emptyMessage) {
+        showFlash(emptyMessage, "success");
+      }
+      return null;
+    }
+    return task;
   }
 
   async function loadDashboard() {
@@ -1507,15 +1764,18 @@ function initRoomWorkPage() {
     }
 
     const isJoined = dashboard.room.membership_status === "joined";
-    joinBtn.classList.toggle("hidden", isJoined);
-    joinBtn.disabled = isJoined;
-    joinBtn.textContent = "Войти в комнату";
-    nextTaskBtn.disabled = !isJoined;
+    joinBtn?.classList.toggle("hidden", isJoined);
+    if (joinBtn) {
+      joinBtn.disabled = isJoined;
+      joinBtn.textContent = "Войти в комнату";
+    }
 
     if (!isJoined) {
       resetCurrentTask("Сначала войди в комнату, чтобы получить задачу на разметку.");
     } else if (!state.currentTask) {
-      renderEmptyTaskBox(taskBox, "Нажми «Взять задачу», чтобы получить следующую задачу.");
+      await loadNextTask({
+        emptyMessage: "Доступных задач больше нет.",
+      });
     }
   }
 
@@ -1523,23 +1783,7 @@ function initRoomWorkPage() {
     clearFlash();
     try {
       await api(`/api/v1/rooms/${currentRoomId}/join/`, { method: "POST", body: {} });
-      showFlash("Ты вошел в комнату. Теперь можно брать задачи.", "success");
       await loadDashboard();
-    } catch (error) {
-      showFlash(error.message, "error");
-    }
-  });
-
-  nextTaskBtn?.addEventListener("click", async () => {
-    clearFlash();
-    try {
-      const task = await api(`/api/v1/rooms/${currentRoomId}/tasks/next/`);
-      state.currentTask = task;
-      prepareTaskForm(task);
-      if (!task) {
-        renderEmptyTaskBox(taskBox, "Доступных задач больше нет.");
-      }
-      showFlash(task ? `Задача #${task.id} готова к разметке.` : "Доступных задач больше нет.", "success");
     } catch (error) {
       showFlash(error.message, "error");
     }
@@ -1550,7 +1794,7 @@ function initRoomWorkPage() {
     clearFlash();
 
     if (!state.currentTask) {
-      showFlash("Сначала возьми задачу.", "error");
+      showFlash("Подожди загрузки задачи.", "error");
       return;
     }
 
@@ -1568,13 +1812,18 @@ function initRoomWorkPage() {
     }
 
     try {
+      const completedTaskId = state.currentTask.id;
       await api(`/api/v1/tasks/${state.currentTask.id}/submit/`, {
         method: "POST",
         body: { result_payload: payload },
       });
-      showFlash(`Задача #${state.currentTask.id} успешно размечена.`, "success");
-      resetCurrentTask("Результат отправлен. Возьми следующую задачу.");
+      resetCurrentTask("Загружаем следующую задачу...");
       await loadDashboard();
+      if (!state.currentTask) {
+        showFlash(`Задача #${completedTaskId} успешно размечена. Доступных задач больше нет.`, "success");
+      } else {
+        showFlash(`Задача #${completedTaskId} успешно размечена. Следующая задача уже готова.`, "success");
+      }
     } catch (error) {
       showFlash(error.message, "error");
     }

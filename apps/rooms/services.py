@@ -439,7 +439,6 @@ def _build_native_export(*, room: Room, tasks, labels, base_url: str | None) -> 
         source_url = task.source_file.url if task.source_file else None
         if source_url and base_url:
             source_url = f"{base_url}{source_url}"
-        latest_annotation = task.annotations.order_by("-submitted_at", "-id").first() if hasattr(task, "annotations") else None
         content["tasks"].append(
             {
                 "task_id": task.id,
@@ -447,7 +446,7 @@ def _build_native_export(*, room: Room, tasks, labels, base_url: str | None) -> 
                 "source_name": task.source_name,
                 "source_url": source_url,
                 "input_payload": task.input_payload,
-                "annotation": task.consensus_payload or (latest_annotation.result_payload if latest_annotation else None),
+                "annotation": _get_export_annotation_payload(task),
                 "validation_score": task.validation_score,
             }
         )
@@ -479,11 +478,7 @@ def _build_coco_export(*, room: Room, tasks, labels) -> ExportArtifact:
             }
         )
 
-        annotation_payload = task.consensus_payload
-        if annotation_payload is None:
-            latest_annotation = task.annotations.order_by("-submitted_at", "-id").first()
-            annotation_payload = latest_annotation.result_payload if latest_annotation else None
-
+        annotation_payload = _get_export_annotation_payload(task)
         if not annotation_payload:
             continue
 
@@ -553,11 +548,7 @@ def _build_yolo_export(*, room: Room, tasks, labels) -> ExportArtifact:
             stem = Path(task.source_name or f"task_{task.id}").stem
             lines = []
 
-            annotation_payload = task.consensus_payload
-            if annotation_payload is None:
-                latest_annotation = task.annotations.order_by("-submitted_at", "-id").first()
-                annotation_payload = latest_annotation.result_payload if latest_annotation else None
-
+            annotation_payload = _get_export_annotation_payload(task)
             if annotation_payload and width > 0 and height > 0:
                 for item in annotation_payload.get("annotations", []):
                     x_min, y_min, x_max, y_max = item["points"]
@@ -587,7 +578,7 @@ def _build_yolo_export(*, room: Room, tasks, labels) -> ExportArtifact:
 
 
 def export_room_annotations(*, room: Room, export_format: str, base_url: str | None = None) -> ExportArtifact:
-    tasks = list(room.tasks.prefetch_related("annotations").all())
+    tasks = list(room.tasks.filter(status=Task.Status.SUBMITTED).prefetch_related("annotations").all())
     labels = list(room.labels.all())
 
     if export_format == "native_json":
@@ -598,3 +589,13 @@ def export_room_annotations(*, room: Room, export_format: str, base_url: str | N
         return _build_yolo_export(room=room, tasks=tasks, labels=labels)
 
     raise NotFoundError("Unsupported export format.")
+
+
+def _get_export_annotation_payload(task: Task):
+    if task.status != Task.Status.SUBMITTED:
+        return None
+    if task.consensus_payload is not None:
+        return task.consensus_payload
+
+    latest_annotation = task.annotations.order_by("-submitted_at", "-id").first()
+    return latest_annotation.result_payload if latest_annotation else None

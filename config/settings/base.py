@@ -4,6 +4,15 @@ from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
+"""
+Base Django settings shared by local, CI and production environments.
+
+Project convention:
+- all runtime configuration comes from environment variables / `.env`
+- DB_* settings are mandatory because the whole app depends on PostgreSQL
+- media files are stored on disk and must be served by nginx in production
+"""
+
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BASE_DIR / ".env"
@@ -48,6 +57,7 @@ def env_list(key: str, default: str = "") -> list[str]:
 
 
 def validate_database_configuration() -> None:
+    # CI can provide POSTGRES_* directly; local and production usually use DB_*.
     required_specs = {
         "DB_NAME": ("DB_NAME", "POSTGRES_DB"),
         "DB_USER": ("DB_USER", "POSTGRES_USER"),
@@ -154,6 +164,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
+# Image/video task sources are persisted here. Django serves them only in DEBUG,
+# so production must expose this directory through nginx.
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

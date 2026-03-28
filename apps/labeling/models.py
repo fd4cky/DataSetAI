@@ -4,6 +4,14 @@ from uuid import uuid4
 
 from common.models import TimeStampedModel
 
+"""
+Task/assignment/annotation models for the labeling pipeline.
+
+`Task` is the unit of work.
+`TaskAssignment` tracks who is currently working on it for a round.
+`Annotation` stores the submitted result bound to a concrete assignment.
+"""
+
 
 def task_source_upload_to(instance, filename: str) -> str:
     return f"task_sources/room_{instance.room_id}/{uuid4().hex}_{filename}"

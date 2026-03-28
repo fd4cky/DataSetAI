@@ -5,6 +5,15 @@ from django.core.validators import RegexValidator
 
 from common.models import TimeStampedModel
 
+"""
+Core room-domain models.
+
+The room is the aggregate root for labeling sessions:
+- owner creates the room
+- memberships control who may participate
+- labels define the allowed annotation vocabulary
+"""
+
 
 class Room(TimeStampedModel):
     class DatasetType(models.TextChoices):
@@ -52,6 +61,8 @@ class Room(TimeStampedModel):
 
     @property
     def required_reviews_per_item(self) -> int:
+        # Single-review is the default path; cross-validation promotes the task
+        # to multi-review rounds handled in `apps.labeling.services`.
         if not self.cross_validation_enabled:
             return 1
         return max(1, self.cross_validation_annotators_count)

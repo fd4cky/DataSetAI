@@ -1,6 +1,8 @@
 from apps.labeling.models import Task
 from common.exceptions import NotFoundError
 
+"""Read helpers for the labeling domain."""
+
 
 def get_task_or_404(*, task_id: int) -> Task:
     try:

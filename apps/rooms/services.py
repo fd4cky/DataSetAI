@@ -17,6 +17,19 @@ from apps.rooms.models import Room, RoomLabel, RoomMembership
 from apps.users.models import User
 from common.exceptions import AccessDeniedError, ConflictError, NotFoundError
 
+"""
+Write-side business logic for rooms and dataset import/export.
+
+This file owns the most important room lifecycle operations:
+- room creation
+- invitation / join flow
+- dataset import for demo/json/image/video sources
+- export of completed annotations
+
+If a change affects persisted room/task state, it likely belongs here rather
+than in API views.
+"""
+
 
 DEMO_DATASET_SAMPLES = [
     "Пользователь оставил положительный отзыв о качестве сервиса.",
@@ -84,6 +97,8 @@ def create_room(
     labels: list[dict] | None = None,
     media_manifest: list[dict] | None = None,
 ) -> Room:
+    # Keep defaults here so API/UI callers do not need to reproduce room
+    # bootstrap logic. Every dataset mode eventually creates Task rows.
     normalized_label = dataset_label or "Тестовый датасет"
     unique_annotator_ids = list(dict.fromkeys(annotator_ids or []))
     dataset_files = list(dataset_files or [])
@@ -169,6 +184,8 @@ def validate_room_password(*, room: Room, password: str = "") -> None:
 
 
 def join_room(*, room: Room, annotator: User, password: str | None = None) -> RoomMembership:
+    # `join` is idempotent: repeated calls should keep the same membership in a
+    # joined state instead of failing.
     if password is not None:
         validate_room_password(room=room, password=password)
 
@@ -279,6 +296,9 @@ def _create_media_tasks(
     media_manifest: list[dict],
     source_type: str,
 ) -> None:
+    # For image datasets we create one Task per uploaded file.
+    # For video datasets we fan out one uploaded video into many image tasks
+    # (frames), because the rest of the labeling pipeline operates on Task rows.
     manifest_by_name = {item["name"]: item for item in media_manifest if item.get("name")}
     next_item_number = 1
 
@@ -324,6 +344,9 @@ def _create_video_frame_tasks(
     metadata: dict,
     start_item_number: int,
 ) -> int:
+    # Video import depends on ffmpeg being available on the host machine.
+    # Production setup must include ffmpeg, writable MEDIA_ROOT and nginx media
+    # serving, otherwise video/image labeling breaks even if Django itself works.
     ffmpeg_path = shutil.which("ffmpeg")
     if not ffmpeg_path:
         raise ConflictError("FFmpeg is required to import video datasets.")
@@ -578,6 +601,8 @@ def _build_yolo_export(*, room: Room, tasks, labels) -> ExportArtifact:
 
 
 def export_room_annotations(*, room: Room, export_format: str, base_url: str | None = None) -> ExportArtifact:
+    # Export only submitted tasks. Pending/in-progress tasks are intentionally
+    # excluded so downstream datasets contain finalized results.
     tasks = list(room.tasks.filter(status=Task.Status.SUBMITTED).prefetch_related("annotations").all())
     labels = list(room.labels.all())
 

@@ -19,7 +19,7 @@
     </script>
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
     <link rel="shortcut icon" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
-    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=labels-horizontal-scroll-1">
+    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=notifications-merge-1">
     {{ stats|json_script:"app-stats-data" }}
     {{ auth_user_data|json_script:"auth-user-data" }}
 </head>
@@ -62,13 +62,24 @@
             </div>
         </header>
 
-        <div id="global-flash" class="global-flash hidden"></div>
+        <div id="toast-region" class="toast-region" aria-live="polite" aria-relevant="additions text"></div>
+        <div id="toast-bootstrap" class="hidden" aria-hidden="true">
+            {% if messages %}
+                {% for message in messages %}
+                    <div
+                        data-toast-message="{{ message }}"
+                        data-toast-type="{% if message.level_tag == 'error' %}error{% elif message.level_tag == 'warning' %}warning{% elif message.level_tag == 'success' %}success{% else %}info{% endif %}"
+                        data-toast-persistent="{% if 'persistent' in message.tags or 'sticky' in message.tags %}true{% else %}false{% endif %}"
+                    ></div>
+                {% endfor %}
+            {% endif %}
+        </div>
 
         <main class="page-layout">
             {% block content %}{% endblock %}
         </main>
     </div>
 
-    <script src="{% static 'ui/app.js' %}?v=labels-horizontal-scroll-1"></script>
+    <script src="{% static 'ui/app.js' %}?v=notifications-merge-1"></script>
 </body>
 </html>

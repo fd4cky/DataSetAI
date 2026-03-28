@@ -58,8 +58,17 @@ const state = {
   pageRefresh: () => {},
 };
 
+const FLASH_DEFAULT_DURATION = 5000;
+const FLASH_MIN_DURATION = 1600;
+const FLASH_EXIT_DURATION = 180;
+
+const toastState = {
+  nextId: 0,
+  items: new Map(),
+};
+
 const globalElements = {
-  globalFlash: document.getElementById("global-flash"),
+  toastRegion: document.getElementById("toast-region"),
   themeToggle: document.getElementById("theme-toggle"),
 };
 
@@ -138,15 +147,164 @@ function formatDate(value) {
   });
 }
 
-function showFlash(message, type = "success") {
-  globalElements.globalFlash.textContent = message;
-  globalElements.globalFlash.className = `global-flash global-flash--${type}`;
-  globalElements.globalFlash.classList.remove("hidden");
+function normalizeFlashType(type) {
+  switch (type) {
+    case "error":
+    case "danger":
+      return "error";
+    case "warning":
+      return "warning";
+    case "info":
+      return "info";
+    case "success":
+    default:
+      return "success";
+  }
 }
 
-function clearFlash() {
-  globalElements.globalFlash.className = "global-flash hidden";
-  globalElements.globalFlash.textContent = "";
+function createToastElement({ id, message, type, persistent, duration }) {
+  const toast = document.createElement("section");
+  toast.className = `toast-notification toast-notification--${type}${persistent ? " is-persistent" : ""}`;
+  toast.dataset.toastId = String(id);
+  toast.setAttribute("role", type === "error" || type === "warning" ? "alert" : "status");
+  if (!persistent) {
+    toast.style.setProperty("--toast-duration", `${duration}ms`);
+  }
+
+  const body = document.createElement("div");
+  body.className = "toast-notification__body";
+
+  const accent = document.createElement("span");
+  accent.className = "toast-notification__accent";
+  accent.setAttribute("aria-hidden", "true");
+
+  const content = document.createElement("div");
+  content.className = "toast-notification__content";
+
+  const paragraph = document.createElement("p");
+  paragraph.className = "toast-notification__message";
+  paragraph.textContent = message;
+  content.appendChild(paragraph);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "toast-notification__close";
+  closeButton.setAttribute("aria-label", "Закрыть уведомление");
+  closeButton.setAttribute("title", "Закрыть уведомление");
+  closeButton.textContent = "×";
+
+  body.appendChild(accent);
+  body.appendChild(content);
+  body.appendChild(closeButton);
+
+  const progress = document.createElement("div");
+  progress.className = "toast-notification__progress";
+  progress.setAttribute("aria-hidden", "true");
+
+  const progressBar = document.createElement("span");
+  progressBar.className = "toast-notification__progress-bar";
+  progress.appendChild(progressBar);
+
+  toast.appendChild(body);
+  toast.appendChild(progress);
+
+  return { toast, closeButton };
+}
+
+function dismissFlash(id) {
+  const toastEntry = toastState.items.get(id);
+  if (!toastEntry || toastEntry.isClosing) {
+    return;
+  }
+
+  toastEntry.isClosing = true;
+  if (toastEntry.timeoutId) {
+    window.clearTimeout(toastEntry.timeoutId);
+    toastEntry.timeoutId = null;
+  }
+
+  toastEntry.element.classList.remove("is-visible");
+  toastEntry.element.classList.add("is-leaving");
+  window.setTimeout(() => {
+    toastEntry.element.remove();
+    toastState.items.delete(id);
+  }, FLASH_EXIT_DURATION);
+}
+
+function showFlash(message, type = "success", options = {}) {
+  const text = String(message || "").trim();
+  if (!text || !globalElements.toastRegion) {
+    return null;
+  }
+
+  const persistent = Boolean(options.persistent);
+  const normalizedType = normalizeFlashType(type);
+  const requestedDuration = Number(options.duration);
+  const duration =
+    persistent
+      ? null
+      : Math.max(Number.isFinite(requestedDuration) ? requestedDuration : FLASH_DEFAULT_DURATION, FLASH_MIN_DURATION);
+  const id = ++toastState.nextId;
+  const { toast, closeButton } = createToastElement({
+    id,
+    message: text,
+    type: normalizedType,
+    persistent,
+    duration,
+  });
+
+  const toastEntry = {
+    id,
+    element: toast,
+    persistent,
+    timeoutId: null,
+    isClosing: false,
+  };
+  toastState.items.set(id, toastEntry);
+
+  closeButton.addEventListener("click", () => {
+    dismissFlash(id);
+  });
+
+  globalElements.toastRegion.appendChild(toast);
+  window.requestAnimationFrame(() => {
+    toast.classList.add("is-visible");
+  });
+
+  if (!persistent) {
+    toastEntry.timeoutId = window.setTimeout(() => {
+      dismissFlash(id);
+    }, duration);
+  }
+
+  return id;
+}
+
+function showPersistentFlash(message, type = "info", options = {}) {
+  return showFlash(message, type, { ...options, persistent: true });
+}
+
+function clearFlash(options = {}) {
+  const includePersistent = Boolean(options.includePersistent);
+  Array.from(toastState.items.values()).forEach((toastEntry) => {
+    if (toastEntry.persistent && !includePersistent) {
+      return;
+    }
+    dismissFlash(toastEntry.id);
+  });
+}
+
+function initBootstrappedToasts() {
+  document.querySelectorAll("[data-toast-message]").forEach((element) => {
+    const message = element.dataset.toastMessage;
+    if (message) {
+      showFlash(message, element.dataset.toastType || "info", {
+        persistent: element.dataset.toastPersistent === "true",
+        duration: element.dataset.toastDuration,
+      });
+    }
+    element.remove();
+  });
 }
 
 function formatApiError(data, fallbackStatus) {
@@ -489,6 +647,7 @@ function renderActivity(container, series) {
 
 function initGlobalHeader() {
   initThemeToggle();
+  initBootstrappedToasts();
   if (state.user) {
     state.pageRefresh();
   }

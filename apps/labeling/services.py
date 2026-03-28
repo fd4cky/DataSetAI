@@ -1,5 +1,6 @@
 from django.db import connection, transaction
-from django.db.models import Count, Exists, F, OuterRef, Q
+from django.db.models import Count, Exists, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.labeling.consensus import evaluate_annotation_consensus
@@ -52,6 +53,15 @@ def get_next_task_for_annotator(*, room: Room, annotator: User):
             task_id=OuterRef("pk"),
             annotator=annotator,
         )
+        round_assignments = (
+            TaskAssignment.objects.filter(
+                task_id=OuterRef("pk"),
+                round_number=OuterRef("current_round"),
+            )
+            .values("task_id")
+            .annotate(total=Count("id"))
+            .values("total")[:1]
+        )
         queryset = (
             Task.objects.filter(
                 room=room,
@@ -59,9 +69,9 @@ def get_next_task_for_annotator(*, room: Room, annotator: User):
             )
             .annotate(
                 has_annotator_assignment=Exists(annotator_assignments),
-                round_assignments_count=Count(
-                    "assignments",
-                    filter=Q(assignments__round_number=F("current_round")),
+                round_assignments_count=Coalesce(
+                    Subquery(round_assignments, output_field=IntegerField()),
+                    0,
                 ),
             )
             .filter(

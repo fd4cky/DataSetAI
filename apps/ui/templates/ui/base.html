@@ -17,7 +17,9 @@
             document.documentElement.dataset.theme = preferredTheme;
         })();
     </script>
-    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=room-delete-owner-4">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
+    <link rel="shortcut icon" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
+    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=brand-refresh-1">
     {{ stats|json_script:"app-stats-data" }}
     {{ auth_user_data|json_script:"auth-user-data" }}
 </head>
@@ -26,7 +28,9 @@
         <header class="site-header">
             <div class="site-header__left">
                 <a class="brand-mark" href="/">
-                    <span class="brand-mark__logo">D</span>
+                    <span class="brand-mark__logo" aria-hidden="true">
+                        <img class="brand-mark__logo-image" src="{% static 'ui/datasetai-mark.png' %}" alt="">
+                    </span>
                     <span class="brand-mark__text">
                         <strong>DataSetAI</strong>
                         <small>Платформа разметки</small>

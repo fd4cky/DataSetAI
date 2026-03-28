@@ -207,15 +207,22 @@ textarea {
 }
 
 .brand-mark__logo {
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
+    width: 58px;
+    height: 58px;
+    padding: 0;
+    border-radius: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(180deg, var(--accent), var(--accent-strong));
-    font-size: 1.35rem;
-    font-weight: 800;
+    flex: 0 0 auto;
+    overflow: hidden;
+}
+
+.brand-mark__logo-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
 }
 
 .brand-mark__text {

@@ -151,6 +151,12 @@ DATABASES = {
         "PASSWORD": required_env("DB_PASSWORD", "POSTGRES_PASSWORD", label="DB_PASSWORD"),
         "HOST": required_env("DB_HOST", "POSTGRES_HOST", label="DB_HOST"),
         "PORT": required_env("DB_PORT", "POSTGRES_PORT", label="DB_PORT"),
+        "OPTIONS": {
+            # Force UTF-8 for PostgreSQL sessions even on Windows hosts with a
+            # non-UTF console/codepage, otherwise inserts with Cyrillic text
+            # can fail with WIN1252 client-encoding errors.
+            "options": "-c client_encoding=UTF8",
+        },
     }
 }
 

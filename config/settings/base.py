@@ -1,27 +1,13 @@
-import getpass
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-
-
-def load_env_file(env_path: Path) -> None:
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
-
-
-load_env_file(BASE_DIR / ".env")
+ENV_FILE = BASE_DIR / ".env"
+load_dotenv(ENV_FILE)
 
 
 def env(key: str, default=None):
@@ -36,6 +22,19 @@ def env_any(*keys: str, default=None):
     return default
 
 
+def required_env(*keys: str, label: str | None = None) -> str:
+    value = env_any(*keys)
+    if value not in (None, ""):
+        return value
+
+    setting_name = label or keys[0]
+    displayed_keys = ", ".join(keys)
+    raise ImproperlyConfigured(
+        f"{setting_name} is not configured. Copy .env.example to .env and set "
+        f"{displayed_keys} before starting the project."
+    )
+
+
 def env_bool(key: str, default: bool = False) -> bool:
     value = os.getenv(key)
     if value is None:
@@ -46,6 +45,43 @@ def env_bool(key: str, default: bool = False) -> bool:
 def env_list(key: str, default: str = "") -> list[str]:
     value = os.getenv(key, default)
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def validate_database_configuration() -> None:
+    required_specs = {
+        "DB_NAME": ("DB_NAME", "POSTGRES_DB"),
+        "DB_USER": ("DB_USER", "POSTGRES_USER"),
+        "DB_PASSWORD": ("DB_PASSWORD", "POSTGRES_PASSWORD"),
+        "DB_HOST": ("DB_HOST", "POSTGRES_HOST"),
+        "DB_PORT": ("DB_PORT", "POSTGRES_PORT"),
+    }
+    missing = [
+        label for label, keys in required_specs.items() if env_any(*keys) in (None, "")
+    ]
+
+    if not ENV_FILE.exists() and missing:
+        missing_values = ", ".join(missing)
+        raise ImproperlyConfigured(
+            f"Configuration file {ENV_FILE.name} was not found and required "
+            f"database settings are missing: {missing_values}. Copy .env.example "
+            "to .env or export the variables before running Django."
+        )
+
+    if missing == ["DB_PASSWORD"]:
+        raise ImproperlyConfigured(
+            "DB_PASSWORD is not configured. Copy .env.example to .env and fill in "
+            "the database password provided for the SSH tunnel."
+        )
+
+    if missing:
+        missing_values = ", ".join(missing)
+        raise ImproperlyConfigured(
+            f"Required database settings are missing: {missing_values}. Update .env "
+            "before starting the project."
+        )
+
+
+validate_database_configuration()
 
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "unsafe-local-secret-key")
@@ -101,11 +137,11 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": env_any("DB_NAME", "POSTGRES_DB", default="datasetai"),
-        "USER": env_any("DB_USER", "POSTGRES_USER", default=getpass.getuser()),
-        "PASSWORD": env_any("DB_PASSWORD", "POSTGRES_PASSWORD", default=""),
-        "HOST": env_any("DB_HOST", "POSTGRES_HOST", default="127.0.0.1"),
-        "PORT": env_any("DB_PORT", "POSTGRES_PORT", default="5432"),
+        "NAME": required_env("DB_NAME", "POSTGRES_DB", label="DB_NAME"),
+        "USER": required_env("DB_USER", "POSTGRES_USER", label="DB_USER"),
+        "PASSWORD": required_env("DB_PASSWORD", "POSTGRES_PASSWORD", label="DB_PASSWORD"),
+        "HOST": required_env("DB_HOST", "POSTGRES_HOST", label="DB_HOST"),
+        "PORT": required_env("DB_PORT", "POSTGRES_PORT", label="DB_PORT"),
     }
 }
 

@@ -19,7 +19,7 @@
     </script>
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
     <link rel="shortcut icon" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
-    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=app-debug-mode-1">
+    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=labels-horizontal-scroll-1">
     {{ stats|json_script:"app-stats-data" }}
     {{ auth_user_data|json_script:"auth-user-data" }}
 </head>
@@ -69,6 +69,6 @@
         </main>
     </div>
 
-    <script src="{% static 'ui/app.js' %}?v=app-debug-mode-1"></script>
+    <script src="{% static 'ui/app.js' %}?v=labels-horizontal-scroll-1"></script>
 </body>
 </html>

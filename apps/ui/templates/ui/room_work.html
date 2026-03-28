@@ -10,19 +10,17 @@
                 <div class="action-strip">
                     <a class="btn btn--muted btn--workscreen-back" href="/rooms/{{ room_id }}/">Назад в комнату</a>
                     <button id="work-join-btn" class="btn btn--muted" type="button">Войти в комнату</button>
+                    <button id="work-submit-btn-top" class="btn btn--primary btn--workscreen-submit hidden" type="submit" form="work-submit-form">Отправить результат</button>
                 </div>
                 <div id="work-task-box" class="empty-card{% if not app_debug_mode %} hidden{% endif %}">Задача пока не выбрана.</div>
                 <form id="work-submit-form" class="stack-form hidden">
                     <div id="work-media-tool" class="media-tool hidden">
-                        <div id="work-media-instructions" class="panel-note">
-                            Зажми левую кнопку мыши и выдели область. Новое выделение сразу получит активный label. Зажми существующую область, чтобы переместить ее, или выбери другой label и кликни по области один раз, чтобы поменять label.
-                        </div>
+                        <div id="work-media-instructions" class="panel-note hidden"></div>
                         <div id="work-label-palette" class="label-chip-list"></div>
-                        <div id="work-active-label" class="panel-note">Активный label пока не выбран.</div>
+                        <div id="work-active-label" class="panel-note hidden"></div>
                         <div class="media-tool__layout">
                             <div id="work-media-stage" class="media-stage empty-card">Файл задачи загрузится автоматически.</div>
                             <div class="media-tool__sidebar">
-                                <div class="panel-note">Области без label-а не дадут отправить задачу.</div>
                                 <div id="work-annotation-list" class="annotation-list empty-card">Разметка пока отсутствует.</div>
                                 <button id="work-clear-annotations-btn" class="btn btn--muted" type="button">Очистить разметку</button>
                             </div>
@@ -35,7 +33,6 @@
   "confidence": 0.95
 }</textarea>
                     </label>
-                    <button class="btn btn--primary" type="submit">Отправить результат</button>
                 </form>
             </div>
         </div>

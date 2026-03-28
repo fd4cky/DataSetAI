@@ -51,6 +51,8 @@ const state = {
   user: authUser,
   currentTask: null,
   roomDashboard: null,
+  reviewTasks: [],
+  selectedReviewTaskId: null,
   appDebugMode,
   theme: document.documentElement.dataset.theme || "light",
   pageRefresh: () => {},
@@ -103,6 +105,15 @@ function translateDatasetMode(mode) {
 
 function translateSourceType(sourceType) {
   return sourceTypeLabels[sourceType] || sourceType;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function pickRandomLabelColor() {
@@ -233,6 +244,52 @@ function renderMetricCards(container, metrics) {
     .join("");
 }
 
+function renderRoomProgressChart(container, overview) {
+  const total = Number(overview.total_tasks || 0);
+  const completed = Number(overview.completed_tasks || 0);
+  const remaining = Math.max(Number(overview.remaining_tasks || 0), 0);
+  const percent = Number(overview.progress_percent || 0);
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const completedOffset = circumference * (1 - Math.min(Math.max(percent, 0), 100) / 100);
+
+  container.innerHTML = `
+    <article class="room-progress-chart">
+      <div class="room-progress-chart__visual">
+        <svg viewBox="0 0 140 140" class="room-progress-chart__svg" aria-hidden="true">
+          <circle class="room-progress-chart__track" cx="70" cy="70" r="${radius}"></circle>
+          <circle
+            class="room-progress-chart__value"
+            cx="70"
+            cy="70"
+            r="${radius}"
+            stroke-dasharray="${circumference.toFixed(2)}"
+            stroke-dashoffset="${completedOffset.toFixed(2)}"
+          ></circle>
+        </svg>
+        <div class="room-progress-chart__center">
+          <strong>${formatPercent(percent)}</strong>
+          <span>готово</span>
+        </div>
+      </div>
+      <div class="room-progress-chart__legend">
+        <div class="room-progress-chart__legend-row">
+          <span>Всего задач</span>
+          <strong>${total}</strong>
+        </div>
+        <div class="room-progress-chart__legend-row">
+          <span>Выполнено</span>
+          <strong>${completed}</strong>
+        </div>
+        <div class="room-progress-chart__legend-row">
+          <span>Осталось</span>
+          <strong>${remaining}</strong>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function renderSummaryRows(container, rows) {
   container.innerHTML = rows
     .map((row) => `
@@ -283,6 +340,16 @@ function formatWeeksLabel(count) {
   return "недель";
 }
 
+const ACTIVITY_CELL_SIZE = 14;
+const ACTIVITY_CELL_GAP = 4;
+const ACTIVITY_CALENDAR_PADDING = 24;
+const ACTIVITY_MIN_WEEKS = 8;
+const ACTIVITY_MAX_WEEKS = 52;
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function buildActivityMonthLabels(series) {
   const labels = [];
   let previousMonthKey = null;
@@ -311,6 +378,17 @@ function buildActivityMonthLabels(series) {
   });
 
   return labels;
+}
+
+function getVisibleActivityWeeks(container) {
+  const availableWidth = Math.floor(container.clientWidth || container.getBoundingClientRect().width || 0);
+  if (!availableWidth) {
+    return ACTIVITY_MAX_WEEKS;
+  }
+
+  const weekStride = ACTIVITY_CELL_SIZE + ACTIVITY_CELL_GAP;
+  const fittedWeeks = Math.floor((availableWidth - ACTIVITY_CALENDAR_PADDING + ACTIVITY_CELL_GAP) / weekStride);
+  return clamp(fittedWeeks, ACTIVITY_MIN_WEEKS, ACTIVITY_MAX_WEEKS);
 }
 
 function buildCalendarSeries(series, targetWeekCount = 52) {
@@ -343,14 +421,47 @@ function renderActivity(container, series) {
     return;
   }
 
-  const targetWeekCount = 52;
+  container._activitySeries = series;
+  const targetWeekCount = getVisibleActivityWeeks(container);
   const calendarSeries = buildCalendarSeries(series, targetWeekCount);
   const maxCount = Math.max(...calendarSeries.map((item) => item.count), 0);
-  const calendarWidth = targetWeekCount * 14 + (targetWeekCount - 1) * 4 + 24;
+  const calendarWidth =
+    targetWeekCount * ACTIVITY_CELL_SIZE + (targetWeekCount - 1) * ACTIVITY_CELL_GAP + ACTIVITY_CALENDAR_PADDING;
   const monthLabels = buildActivityMonthLabels(calendarSeries);
+
+  if (!container._activityResizeBound) {
+    container._activityResizeBound = true;
+
+    const rerenderIfNeeded = () => {
+      const nextWeeks = getVisibleActivityWeeks(container);
+      if (nextWeeks === Number(container.dataset.activityWeeks || 0)) {
+        return;
+      }
+
+      if (container._activityResizeFrame) {
+        cancelAnimationFrame(container._activityResizeFrame);
+      }
+
+      container._activityResizeFrame = requestAnimationFrame(() => {
+        container._activityResizeFrame = null;
+        renderActivity(container, container._activitySeries || []);
+      });
+    };
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => rerenderIfNeeded());
+      observer.observe(container);
+      container._activityResizeObserver = observer;
+    } else {
+      window.addEventListener("resize", rerenderIfNeeded);
+      container._activityResizeHandler = rerenderIfNeeded;
+    }
+  }
+
+  container.dataset.activityWeeks = String(targetWeekCount);
   container.innerHTML = `
     <div class="activity-board__calendar" style="width: ${calendarWidth}px; max-width: 100%;">
-      <div class="activity-board__months" style="grid-template-columns: repeat(${targetWeekCount}, 14px);">
+      <div class="activity-board__months" style="grid-template-columns: repeat(${targetWeekCount}, ${ACTIVITY_CELL_SIZE}px);">
         ${monthLabels
           .map(
             (item) =>
@@ -358,7 +469,7 @@ function renderActivity(container, series) {
           )
           .join("")}
       </div>
-      <div class="activity-board__grid" style="grid-template-columns: repeat(${targetWeekCount}, 14px);">
+      <div class="activity-board__grid" style="grid-template-columns: repeat(${targetWeekCount}, ${ACTIVITY_CELL_SIZE}px);">
         ${calendarSeries
           .map((item) => {
             let level = 0;
@@ -389,7 +500,6 @@ function initRoomsPage() {
   const roomIdInput = document.getElementById("rooms-room-id");
   const passwordInput = document.getElementById("rooms-room-password");
   const enterBtn = document.getElementById("rooms-enter-btn");
-  const createLink = document.getElementById("rooms-create-link");
 
   function updateEnterButtonState() {
     const isReady = roomIdInput.value.trim();
@@ -398,35 +508,44 @@ function initRoomsPage() {
     enterBtn.classList.toggle("btn--muted", !isReady);
   }
 
-  async function loadRooms() {
-    if (!state.user) {
-      return;
-    }
-
-    const [ownedRooms, memberRooms] = await Promise.all([api("/api/v1/rooms/"), api("/api/v1/me/rooms/")]);
-    const roomMap = new Map();
-    [...ownedRooms, ...memberRooms].forEach((room) => {
-      if (!roomMap.has(room.id)) {
-        roomMap.set(room.id, room);
+  function sortRooms(rooms) {
+    return [...rooms].sort((left, right) => {
+      if (Boolean(left.is_pinned) !== Boolean(right.is_pinned)) {
+        return Number(Boolean(right.is_pinned)) - Number(Boolean(left.is_pinned));
       }
+
+      const rightCreatedAt = right.created_at ? new Date(right.created_at).getTime() : 0;
+      const leftCreatedAt = left.created_at ? new Date(left.created_at).getTime() : 0;
+      if (rightCreatedAt !== leftCreatedAt) {
+        return rightCreatedAt - leftCreatedAt;
+      }
+
+      return Number(right.id) - Number(left.id);
     });
-    const rooms = Array.from(roomMap.values());
+  }
 
-    if (!rooms?.length) {
-      grid.innerHTML = "";
-      empty.classList.remove("hidden");
-      return;
-    }
-
-    empty.classList.add("hidden");
+  function renderRooms(rooms) {
     grid.innerHTML = rooms
       .map(
         (room) => `
-          <article class="room-card" data-room-id="${room.id}">
+          <article class="room-card ${room.is_pinned ? "is-pinned" : ""}" data-room-id="${room.id}">
             <div>
-              <div class="room-card__id">Комната #${room.id}</div>
-              <div class="room-card__title">${room.title}</div>
-              <div class="room-card__meta">${room.description || "Описание пока не добавлено."}</div>
+              <div class="room-card__head">
+                <div class="room-card__id">Комната #${room.id}</div>
+                <button
+                  class="room-card__pin"
+                  type="button"
+                  data-room-pin-id="${room.id}"
+                  data-is-pinned="${room.is_pinned ? "true" : "false"}"
+                  aria-pressed="${room.is_pinned ? "true" : "false"}"
+                  aria-label="${room.is_pinned ? "Убрать комнату из закрепленных" : "Закрепить комнату"}"
+                  title="${room.is_pinned ? "Убрать из закрепленных" : "Закрепить комнату"}"
+                >
+                  ${room.is_pinned ? "★" : "☆"}
+                </button>
+              </div>
+              <div class="room-card__title">${escapeHtml(room.title)}</div>
+              <div class="room-card__meta">${escapeHtml(room.description || "Описание пока не добавлено.")}</div>
             </div>
             <div class="room-card__footer">
               <div>ID: ${room.id}</div>
@@ -448,6 +567,56 @@ function initRoomsPage() {
         window.location.href = `/rooms/${card.dataset.roomId}/`;
       });
     });
+
+    grid.querySelectorAll("[data-room-pin-id]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        clearFlash();
+
+        const roomId = Number(button.dataset.roomPinId);
+        const nextPinnedState = button.dataset.isPinned !== "true";
+
+        button.disabled = true;
+        try {
+          await api(`/api/v1/rooms/${roomId}/pin/`, {
+            method: "POST",
+            body: { is_pinned: nextPinnedState },
+          });
+          showFlash(
+            nextPinnedState ? `Комната #${roomId} закреплена.` : `Комната #${roomId} откреплена.`,
+            "success"
+          );
+          await loadRooms();
+        } catch (error) {
+          showFlash(error.message, "error");
+          button.disabled = false;
+        }
+      });
+    });
+  }
+
+  async function loadRooms() {
+    if (!state.user) {
+      return;
+    }
+
+    const [ownedRooms, memberRooms] = await Promise.all([api("/api/v1/rooms/"), api("/api/v1/me/rooms/")]);
+    const roomMap = new Map();
+    [...ownedRooms, ...memberRooms].forEach((room) => {
+      if (!roomMap.has(room.id)) {
+        roomMap.set(room.id, room);
+      }
+    });
+    const rooms = sortRooms(Array.from(roomMap.values()));
+
+    if (!rooms?.length) {
+      grid.innerHTML = "";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    empty.classList.add("hidden");
+    renderRooms(rooms);
   }
 
   roomIdInput?.addEventListener("input", updateEnterButtonState);
@@ -849,6 +1018,183 @@ function renderCustomerAnnotatorDetail(container, activityContainer, annotator) 
   renderActivity(activityContainer, annotator.activity);
 }
 
+function getRoomLabelById(labelId) {
+  return state.roomDashboard?.labels?.find((label) => label.id === labelId) || null;
+}
+
+function getReviewPayloadAnnotations(payload) {
+  if (!payload || !Array.isArray(payload.annotations)) {
+    return [];
+  }
+  return payload.annotations.filter(
+    (annotation) =>
+      annotation &&
+      Array.isArray(annotation.points) &&
+      annotation.points.length === 4 &&
+      typeof annotation.label_id === "number"
+  );
+}
+
+function renderReviewGraphicPreview(container, task, payload) {
+  if (!container || !task?.source_file_url) {
+    return;
+  }
+
+  const annotations = getReviewPayloadAnnotations(payload);
+  if (!annotations.length) {
+    container.innerHTML = "";
+    container.classList.add("hidden");
+    return;
+  }
+
+  container.classList.remove("hidden");
+  container.innerHTML = `
+    <div class="review-media-stage media-stage">
+      <div class="review-media-canvas media-canvas">
+        <img class="media-stage__asset" src="${escapeHtml(task.source_file_url)}" alt="${escapeHtml(task.source_name || `task-${task.id}`)}">
+        <div class="review-media-overlay media-overlay"></div>
+      </div>
+    </div>
+  `;
+
+  const asset = container.querySelector(".media-stage__asset");
+  const overlay = container.querySelector(".review-media-overlay");
+  if (!asset || !overlay) {
+    return;
+  }
+
+  const renderBoxes = () => {
+    overlay.innerHTML = "";
+
+    const naturalWidth = asset.naturalWidth || task.input_payload?.width || asset.clientWidth || 1;
+    const naturalHeight = asset.naturalHeight || task.input_payload?.height || asset.clientHeight || 1;
+    const bounds = overlay.getBoundingClientRect();
+    const scaleX = bounds.width > 0 ? bounds.width / naturalWidth : 1;
+    const scaleY = bounds.height > 0 ? bounds.height / naturalHeight : 1;
+
+    annotations.forEach((annotation) => {
+      const [xMin, yMin, xMax, yMax] = annotation.points;
+      const label = getRoomLabelById(annotation.label_id);
+      const box = document.createElement("div");
+      box.className = "review-media-bbox";
+      box.style.left = `${xMin * scaleX}px`;
+      box.style.top = `${yMin * scaleY}px`;
+      box.style.width = `${Math.max((xMax - xMin) * scaleX, 1)}px`;
+      box.style.height = `${Math.max((yMax - yMin) * scaleY, 1)}px`;
+      box.style.setProperty("--bbox-color", label?.color || "#B8B8B8");
+      box.innerHTML = `<span>${escapeHtml(label?.name || `Label #${annotation.label_id}`)}</span>`;
+      overlay.appendChild(box);
+    });
+  };
+
+  if (asset.complete) {
+    window.requestAnimationFrame(renderBoxes);
+  } else {
+    asset.addEventListener("load", renderBoxes, { once: true });
+  }
+}
+
+function renderReviewGraphicPreviews(container, detail) {
+  const consensusPreview = container.querySelector("[data-review-consensus-preview]");
+  renderReviewGraphicPreview(consensusPreview, detail.task, detail.consensus_payload);
+
+  container.querySelectorAll("[data-review-annotation-preview]").forEach((preview) => {
+    const annotationId = Number(preview.dataset.annotationId);
+    const annotation = (detail.annotations || []).find((item) => item.id === annotationId);
+    renderReviewGraphicPreview(preview, detail.task, annotation?.result_payload);
+  });
+}
+
+function renderReviewComparison(
+  consensusContainer,
+  annotationsContainer,
+  comparisonSection,
+  rejectBtn,
+  detail
+) {
+  if (!comparisonSection || !consensusContainer || !annotationsContainer || !rejectBtn) {
+    return;
+  }
+
+  if (!detail) {
+    comparisonSection.classList.add("hidden");
+    consensusContainer.className = "empty-card";
+    consensusContainer.textContent = "Выбери размеченный объект в списке выше.";
+    annotationsContainer.className = "empty-card";
+    annotationsContainer.textContent = "Выбери размеченный объект в списке выше.";
+    rejectBtn.classList.add("hidden");
+    rejectBtn.removeAttribute("data-task-id");
+    return;
+  }
+
+  comparisonSection.classList.remove("hidden");
+  rejectBtn.classList.remove("hidden");
+  rejectBtn.dataset.taskId = String(detail.task.id);
+
+  const consensusHtml = detail.consensus_payload
+    ? `
+        <div class="review-media-preview hidden" data-review-consensus-preview></div>
+        ${
+          state.appDebugMode
+            ? `<pre class="payload-preview">${escapeHtml(JSON.stringify(detail.consensus_payload, null, 2))}</pre>`
+            : ""
+        }
+      `
+    : '<div class="panel-note">Финальный payload для этой задачи пока отсутствует.</div>';
+
+  const annotationsHtml = (detail.annotations || [])
+    .map(
+      (annotation) => `
+        <div class="review-annotation-card">
+          <div class="review-annotation-card__head">
+            <strong>${escapeHtml(annotation.annotator_username || `#${annotation.annotator_id}`)}</strong>
+            <span>Раунд ${escapeHtml(annotation.round_number)} · ${escapeHtml(formatDate(annotation.submitted_at))}</span>
+          </div>
+          <div class="review-media-preview hidden" data-review-annotation-preview data-annotation-id="${escapeHtml(annotation.id)}"></div>
+          ${
+            state.appDebugMode
+              ? `<pre class="payload-preview">${escapeHtml(JSON.stringify(annotation.result_payload, null, 2))}</pre>`
+              : ""
+          }
+        </div>
+      `
+    )
+    .join("");
+
+  consensusContainer.className = "review-comparison-stack";
+  consensusContainer.innerHTML = consensusHtml;
+  annotationsContainer.className = "review-comparison-stack";
+  annotationsContainer.innerHTML =
+    annotationsHtml || '<div class="panel-note">Аннотации для этой задачи пока отсутствуют.</div>';
+
+  renderReviewGraphicPreviews(comparisonSection, detail);
+}
+
+function renderReviewTaskDetail(container, detail) {
+  if (!detail) {
+    container.className = "empty-card";
+    container.textContent = "Выбери размеченный объект в списке слева.";
+    return;
+  }
+
+  const task = detail.task;
+  const sourcePreview = task.source_file_url
+    ? (task.source_type === "image"
+        ? `<img class="review-task-preview" src="${escapeHtml(task.source_file_url)}" alt="${escapeHtml(task.source_name || `task-${task.id}`)}">`
+        : `<video class="review-task-preview" src="${escapeHtml(task.source_file_url)}" controls preload="metadata"></video>`)
+    : "";
+
+  container.className = "summary-stack review-task-detail";
+  container.innerHTML = `
+    <div class="summary-row"><span>Задача</span><strong>#${escapeHtml(task.id)}</strong></div>
+    <div class="summary-row"><span>Статус</span><strong>${escapeHtml(translateTaskStatus(task.status))}</strong></div>
+    <div class="summary-row"><span>Тип</span><strong>${escapeHtml(translateSourceType(task.source_type))}</strong></div>
+    <div class="summary-row"><span>Раунд</span><strong>${escapeHtml(task.current_round)}</strong></div>
+    <div class="summary-row"><span>Сходство</span><strong>${task.validation_score == null ? "Не рассчитано" : `${escapeHtml(task.validation_score)}%`}</strong></div>
+    ${sourcePreview}
+  `;
+}
+
 function renderRoomDashboardHeader(title, subtitle, roomHeaderMeta, roomMetrics, dashboard) {
   title.textContent = dashboard.room.title;
   subtitle.textContent = dashboard.room.description || "Описание для этой комнаты пока не заполнено.";
@@ -867,12 +1213,7 @@ function renderRoomDashboardHeader(title, subtitle, roomHeaderMeta, roomMetrics,
     </div>
   `;
 
-  renderMetricCards(roomMetrics, [
-    { label: "Всего задач", value: dashboard.overview.total_tasks },
-    { label: "Выполнено", value: dashboard.overview.completed_tasks },
-    { label: "Осталось", value: dashboard.overview.remaining_tasks },
-    { label: "Готовность", value: formatPercent(dashboard.overview.progress_percent) },
-  ]);
+  renderRoomProgressChart(roomMetrics, dashboard.overview);
 }
 
 function renderAnnotatorOverview(summaryContainer, activityContainer, dashboard) {
@@ -967,6 +1308,7 @@ function initRoomDetailPage() {
   const roomHeaderMeta = document.getElementById("room-header-meta");
   const roomMetrics = document.getElementById("room-metrics");
   const annotatorWorkspace = document.getElementById("annotator-workspace");
+  const annotatorManageSide = document.getElementById("annotator-manage-side");
   const customerWorkspace = document.getElementById("customer-workspace");
   const annotatorSummary = document.getElementById("annotator-summary");
   const annotatorActivity = document.getElementById("annotator-activity");
@@ -980,6 +1322,18 @@ function initRoomDetailPage() {
   const customerLabels = document.getElementById("customer-labels");
   const exportFormatSelect = document.getElementById("detail-export-format");
   const exportBtn = document.getElementById("detail-export-btn");
+  const reviewTasksList = document.getElementById("review-tasks-list");
+  const reviewTaskDetail = document.getElementById("review-task-detail");
+  const reviewComparisonSection = document.getElementById("review-comparison-section");
+  const reviewConsensusDetail = document.getElementById("review-consensus-detail");
+  const reviewAnnotationsDetail = document.getElementById("review-annotations-detail");
+  const rejectReviewTaskBtn = document.getElementById("reject-review-task-btn");
+  const annotatorsSearchInput = document.getElementById("detail-annotators-search");
+  const reviewSearchInput = document.getElementById("detail-review-search");
+
+  function normalizeSearchValue(value) {
+    return String(value || "").trim().toLowerCase();
+  }
 
   function bindDeleteRoomButton() {
     const deleteRoomBtn = document.getElementById("detail-delete-room-btn");
@@ -1002,13 +1356,12 @@ function initRoomDetailPage() {
   }
 
   function updateAnnotatorWorkAction(dashboard) {
-    const membershipStatus = dashboard.room.membership_status;
-    const isJoined = membershipStatus === "joined";
+    const isReadyForWork = dashboard.actor.can_annotate;
 
     workBtn.disabled = false;
-    workBtn.dataset.action = isJoined ? "work" : "join";
-    workBtn.textContent = isJoined ? "Приступить к работе" : "Вступить в комнату";
-    workNote.textContent = isJoined
+    workBtn.dataset.action = isReadyForWork ? "work" : "join";
+    workBtn.textContent = isReadyForWork ? "Приступить к работе" : "Вступить в комнату";
+    workNote.textContent = isReadyForWork
       ? "Обзор комнаты открыт. Вход в комнату, получение задач и отправка результата доступны только в отдельной рабочей среде."
       : "Ты приглашен в комнату. Сначала подтверди вступление, после этого кнопка переключится на переход в рабочую среду.";
   }
@@ -1019,19 +1372,28 @@ function initRoomDetailPage() {
 
     renderRoomDashboardHeader(title, subtitle, roomHeaderMeta, roomMetrics, dashboard);
 
-    if (dashboard.actor.role === "annotator") {
-      customerWorkspace.classList.add("hidden");
+    if (dashboard.actor.can_annotate) {
       annotatorWorkspace.classList.remove("hidden");
+      annotatorWorkspace.classList.toggle("workspace-grid--owner-manage", dashboard.actor.can_manage);
+      annotatorManageSide?.classList.toggle("hidden", !dashboard.actor.can_manage);
 
       renderAnnotatorOverview(annotatorSummary, annotatorActivity, dashboard);
       updateAnnotatorWorkAction(dashboard);
-      return;
+    } else {
+      annotatorWorkspace.classList.add("hidden");
+      annotatorWorkspace.classList.remove("workspace-grid--owner-manage");
+      annotatorManageSide?.classList.add("hidden");
     }
 
-    annotatorWorkspace.classList.add("hidden");
-    customerWorkspace.classList.remove("hidden");
-    renderCustomerView(dashboard);
-    bindDeleteRoomButton();
+    if (dashboard.actor.can_manage) {
+      customerWorkspace.classList.remove("hidden");
+      renderCustomerView(dashboard);
+      state.reviewTasks = [];
+      await loadReviewTasks();
+      bindDeleteRoomButton();
+    } else {
+      customerWorkspace.classList.add("hidden");
+    }
   }
 
   function renderCustomerView(dashboard) {
@@ -1041,13 +1403,35 @@ function initRoomDetailPage() {
       .join("");
     exportBtn.disabled = !dashboard.export_formats?.length;
 
+    const searchTerm = normalizeSearchValue(annotatorsSearchInput?.value);
+    const filteredAnnotators = (dashboard.annotators || []).filter((annotator) => {
+      if (!searchTerm) {
+        return true;
+      }
+
+      return [
+        annotator.username,
+        annotator.user_id,
+        translateMembership(annotator.status),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchTerm);
+    });
+
     if (!dashboard.annotators?.length) {
       annotatorsList.innerHTML = '<div class="empty-card">В этой комнате пока нет исполнителей.</div>';
       renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, null);
       return;
     }
 
-    annotatorsList.innerHTML = dashboard.annotators
+    if (!filteredAnnotators.length) {
+      annotatorsList.innerHTML = '<div class="empty-card">По этому запросу исполнители не найдены.</div>';
+      renderCustomerAnnotatorDetail(annotatorDetailPanel, annotatorDetailActivity, null);
+      return;
+    }
+
+    annotatorsList.innerHTML = filteredAnnotators
       .map(
         (annotator, index) => `
           <button class="annotator-row ${index === 0 ? "is-active" : ""}" type="button" data-user-id="${annotator.user_id}">
@@ -1071,14 +1455,117 @@ function initRoomDetailPage() {
       });
     };
 
-    const firstAnnotator = dashboard.annotators[0];
-    setAnnotator(firstAnnotator);
+    const activeAnnotator =
+      filteredAnnotators.find((item) => item.user_id === Number(annotatorDetailPanel.dataset.userId)) || filteredAnnotators[0];
+    annotatorDetailPanel.dataset.userId = String(activeAnnotator.user_id);
+    setAnnotator(activeAnnotator);
     annotatorsList.querySelectorAll(".annotator-row").forEach((row) => {
       row.addEventListener("click", () => {
-        const annotator = dashboard.annotators.find((item) => item.user_id === Number(row.dataset.userId));
+        const annotator = filteredAnnotators.find((item) => item.user_id === Number(row.dataset.userId));
+        annotatorDetailPanel.dataset.userId = String(annotator.user_id);
         setAnnotator(annotator);
       });
     });
+  }
+
+  async function loadReviewTaskDetail(taskId) {
+    const detail = await api(`/api/v1/tasks/${taskId}/review/`);
+    state.selectedReviewTaskId = taskId;
+    renderReviewTaskDetail(reviewTaskDetail, detail);
+    renderReviewComparison(
+      reviewConsensusDetail,
+      reviewAnnotationsDetail,
+      reviewComparisonSection,
+      rejectReviewTaskBtn,
+      detail
+    );
+  }
+
+  async function loadReviewTasks() {
+    if (!reviewTasksList || !reviewTaskDetail) {
+      return;
+    }
+
+    if (!state.reviewTasks.length) {
+      const tasks = await api(`/api/v1/rooms/${currentRoomId}/review/tasks/`);
+      state.reviewTasks = tasks || [];
+    }
+
+    const searchTerm = normalizeSearchValue(reviewSearchInput?.value);
+    const filteredTasks = state.reviewTasks.filter((task) => {
+      if (!searchTerm) {
+        return true;
+      }
+
+      return [
+        `задача ${task.id}`,
+        task.source_name,
+        translateSourceType(task.source_type),
+        task.status,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchTerm);
+    });
+
+    if (!state.reviewTasks.length) {
+      reviewTasksList.innerHTML = '<div class="empty-card">В итоговой выборке пока нет объектов для проверки.</div>';
+      renderReviewTaskDetail(reviewTaskDetail, null);
+      renderReviewComparison(
+        reviewConsensusDetail,
+        reviewAnnotationsDetail,
+        reviewComparisonSection,
+        rejectReviewTaskBtn,
+        null
+      );
+      return;
+    }
+
+    if (!filteredTasks.length) {
+      reviewTasksList.innerHTML = '<div class="empty-card">По этому запросу объекты не найдены.</div>';
+      renderReviewTaskDetail(reviewTaskDetail, null);
+      renderReviewComparison(
+        reviewConsensusDetail,
+        reviewAnnotationsDetail,
+        reviewComparisonSection,
+        rejectReviewTaskBtn,
+        null
+      );
+      return;
+    }
+
+    reviewTasksList.innerHTML = filteredTasks
+      .map(
+        (task) => `
+          <button class="annotator-row review-task-row ${task.id === state.selectedReviewTaskId ? "is-active" : ""}" type="button" data-task-id="${task.id}">
+            <div class="annotator-row__meta">
+              <strong>Задача #${task.id}</strong>
+              <span>${escapeHtml(task.source_name || translateSourceType(task.source_type))}</span>
+            </div>
+            <div class="annotator-row__brief">
+              <div>${task.validation_score == null ? "Без score" : `${task.validation_score}%`}</div>
+              <div>${task.annotations_count} аннотац.</div>
+            </div>
+          </button>
+        `
+      )
+      .join("");
+
+    const selectedTaskId =
+      filteredTasks.find((item) => item.id === state.selectedReviewTaskId)?.id ?? filteredTasks[0].id;
+
+    reviewTasksList.querySelectorAll(".review-task-row").forEach((row) => {
+      row.classList.toggle("is-active", Number(row.dataset.taskId) === selectedTaskId);
+      row.addEventListener("click", async () => {
+        const taskId = Number(row.dataset.taskId);
+        reviewTasksList.querySelectorAll(".review-task-row").forEach((item) => {
+          item.classList.toggle("is-active", Number(item.dataset.taskId) === taskId);
+        });
+        await loadReviewTaskDetail(taskId);
+      });
+    });
+
+    await loadReviewTaskDetail(selectedTaskId);
   }
 
   inviteForm?.addEventListener("submit", async (event) => {
@@ -1130,12 +1617,52 @@ function initRoomDetailPage() {
     }
   });
 
+  annotatorsSearchInput?.addEventListener("input", () => {
+    if (state.roomDashboard?.actor.can_manage) {
+      renderCustomerView(state.roomDashboard);
+    }
+  });
+
+  reviewSearchInput?.addEventListener("input", async () => {
+    if (state.roomDashboard?.actor.can_manage) {
+      await loadReviewTasks();
+    }
+  });
+
+  rejectReviewTaskBtn?.addEventListener("click", async () => {
+    const taskId = Number(rejectReviewTaskBtn.dataset.taskId);
+    if (!taskId) {
+      return;
+    }
+
+    clearFlash();
+    const shouldReject = window.confirm(
+      "Отклонить эту разметку? Задача будет исключена из итоговой выборки и отправлена на повторную разметку."
+    );
+    if (!shouldReject) {
+      return;
+    }
+
+    try {
+      await api(`/api/v1/tasks/${taskId}/reject/`, {
+        method: "POST",
+        body: {},
+      });
+      state.selectedReviewTaskId = null;
+      showFlash(`Разметка по задаче #${taskId} отклонена. Объект возвращен в пул.`, "success");
+      await loadDashboard();
+    } catch (error) {
+      showFlash(error.message, "error");
+    }
+  });
+
   state.pageRefresh = async () => {
     if (!state.user) {
       return;
     }
 
     try {
+      state.reviewTasks = [];
       await loadDashboard();
     } catch (error) {
       showFlash(error.message, "error");
@@ -1700,6 +2227,7 @@ function initRoomWorkPage() {
   }
 
   const joinBtn = document.getElementById("work-join-btn");
+  const topSubmitBtn = document.getElementById("work-submit-btn-top");
   const taskBox = document.getElementById("work-task-box");
   const submitForm = document.getElementById("work-submit-form");
   const resultJson = document.getElementById("work-result-json");
@@ -1722,6 +2250,7 @@ function initRoomWorkPage() {
   function resetCurrentTask(message) {
     state.currentTask = null;
     submitForm.classList.add("hidden");
+    topSubmitBtn?.classList.add("hidden");
     mediaEditor.reset();
     renderEmptyTaskBox(taskBox, message);
   }
@@ -1729,6 +2258,7 @@ function initRoomWorkPage() {
   function prepareTaskForm(task) {
     renderCurrentTask(taskBox, task);
     submitForm.classList.toggle("hidden", !task);
+    topSubmitBtn?.classList.toggle("hidden", !task);
 
     if (!task) {
       mediaEditor.reset();
@@ -1775,22 +2305,23 @@ function initRoomWorkPage() {
     const dashboard = await api(`/api/v1/rooms/${currentRoomId}/dashboard/`);
     state.roomDashboard = dashboard;
 
-    if (dashboard.actor.role !== "annotator") {
-      showFlash("Рабочая среда доступна только исполнителю комнаты.", "error");
+    if (!dashboard.actor.can_annotate) {
+      showFlash("Рабочая среда доступна только участникам комнаты, которые могут размечать задачи.", "error");
       window.setTimeout(() => {
         window.location.href = `/rooms/${currentRoomId}/`;
       }, 900);
       return;
     }
 
-    const isJoined = dashboard.room.membership_status === "joined";
-    joinBtn?.classList.toggle("hidden", isJoined);
+    const canStartWorking = dashboard.actor.can_annotate;
+    const shouldShowJoin = !canStartWorking && dashboard.room.membership_status !== "owner";
+    joinBtn?.classList.toggle("hidden", shouldShowJoin === false);
     if (joinBtn) {
-      joinBtn.disabled = isJoined;
+      joinBtn.disabled = !shouldShowJoin;
       joinBtn.textContent = "Войти в комнату";
     }
 
-    if (!isJoined) {
+    if (!canStartWorking) {
       resetCurrentTask("Сначала войди в комнату, чтобы получить задачу на разметку.");
     } else if (!state.currentTask) {
       await loadNextTask({

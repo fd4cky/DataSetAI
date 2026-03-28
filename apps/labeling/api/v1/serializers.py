@@ -89,6 +89,8 @@ class AnnotationSerializer(serializers.ModelSerializer):
     task_id = serializers.IntegerField(read_only=True)
     annotator_id = serializers.IntegerField(read_only=True)
     assignment_id = serializers.IntegerField(read_only=True)
+    annotator_username = serializers.CharField(source="annotator.username", read_only=True)
+    round_number = serializers.IntegerField(source="assignment.round_number", read_only=True)
 
     class Meta:
         model = Annotation
@@ -97,8 +99,46 @@ class AnnotationSerializer(serializers.ModelSerializer):
             "task_id",
             "assignment_id",
             "annotator_id",
+            "annotator_username",
+            "round_number",
             "result_payload",
             "submitted_at",
             "created_at",
             "updated_at",
         )
+
+
+class ReviewTaskListItemSerializer(serializers.ModelSerializer):
+    source_file_url = serializers.SerializerMethodField()
+    annotations_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Task
+        fields = (
+            "id",
+            "status",
+            "current_round",
+            "validation_score",
+            "source_type",
+            "source_name",
+            "source_file_url",
+            "annotations_count",
+            "updated_at",
+        )
+
+    def get_source_file_url(self, obj):
+        if not obj.source_file:
+            return None
+        request = self.context.get("request")
+        if request is None:
+            return obj.source_file.url
+        return request.build_absolute_uri(obj.source_file.url)
+
+    def get_annotations_count(self, obj):
+        return obj.annotations.count()
+
+
+class ReviewTaskDetailSerializer(serializers.Serializer):
+    task = TaskSerializer()
+    consensus_payload = serializers.JSONField(allow_null=True)
+    annotations = AnnotationSerializer(many=True)

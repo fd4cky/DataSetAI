@@ -103,3 +103,21 @@ class RoomMembership(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.room_id}:{self.user_id}:{self.status}"
+
+
+class RoomPin(TimeStampedModel):
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="pins")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="room_pins",
+    )
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.UniqueConstraint(fields=("room", "user"), name="unique_room_pin"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.room_id}:{self.user_id}"

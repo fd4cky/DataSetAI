@@ -12,7 +12,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.labeling.models import Annotation, Task, TaskAssignment
-from apps.rooms.models import RoomMembership
+from apps.rooms.models import RoomMembership, RoomPin
 from apps.users.models import User
 from tests.factories import invite_annotator, make_room, make_user
 
@@ -86,6 +86,47 @@ class RoomsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], visible_room.id)
+
+    def test_user_can_pin_room_and_pinned_rooms_appear_first(self):
+        first_room = make_room(customer=self.customer, title="First room")
+        second_room = make_room(customer=self.customer, title="Second room")
+        invite_annotator(room=first_room, annotator=self.annotator, invited_by=self.customer)
+        invite_annotator(room=second_room, annotator=self.annotator, invited_by=self.customer)
+
+        pin_response = self.client.post(
+            reverse("room-pin", kwargs={"room_id": first_room.id}),
+            {"is_pinned": True},
+            format="json",
+            **self.auth(self.annotator),
+        )
+        list_response = self.client.get(reverse("my-rooms"), **self.auth(self.annotator))
+
+        self.assertEqual(pin_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(RoomPin.objects.filter(room=first_room, user=self.annotator).exists())
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in list_response.data], [first_room.id, second_room.id])
+        self.assertTrue(list_response.data[0]["is_pinned"])
+        self.assertFalse(list_response.data[1]["is_pinned"])
+
+    def test_room_pinning_is_per_user(self):
+        room = make_room(customer=self.customer, title="Shared room")
+        invite_annotator(room=room, annotator=self.annotator, invited_by=self.customer)
+        invite_annotator(room=room, annotator=self.other_annotator, invited_by=self.customer)
+
+        self.client.post(
+            reverse("room-pin", kwargs={"room_id": room.id}),
+            {"is_pinned": True},
+            format="json",
+            **self.auth(self.annotator),
+        )
+
+        annotator_response = self.client.get(reverse("my-rooms"), **self.auth(self.annotator))
+        other_response = self.client.get(reverse("my-rooms"), **self.auth(self.other_annotator))
+
+        self.assertEqual(annotator_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(other_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(annotator_response.data[0]["is_pinned"])
+        self.assertFalse(other_response.data[0]["is_pinned"])
 
     def test_annotator_cannot_join_uninvited_room(self):
         room = make_room(customer=self.customer, title="Locked room")
@@ -365,3 +406,68 @@ class RoomsApiTests(APITestCase):
         self.assertEqual([item["task_id"] for item in native_payload["tasks"]], [valid_task.id])
         self.assertEqual([item["id"] for item in coco_payload["images"]], [valid_task.id])
         self.assertEqual([item["image_id"] for item in coco_payload["annotations"]], [valid_task.id])
+
+    def test_owner_can_review_and_reject_submitted_task(self):
+        room = make_room(customer=self.customer, title="Review room", dataset_type="image")
+        label = room.labels.create(name="car", color="#FF6B6B", sort_order=0)
+        task = Task.objects.create(
+            room=room,
+            status=Task.Status.SUBMITTED,
+            source_type=Task.SourceType.IMAGE,
+            source_name="review.jpg",
+            input_payload={"width": 640, "height": 480, "source_name": "review.jpg"},
+            consensus_payload={
+                "annotations": [
+                    {
+                        "type": "bbox",
+                        "label_id": label.id,
+                        "points": [10, 10, 100, 100],
+                        "frame": 0,
+                        "attributes": [],
+                        "occluded": False,
+                    }
+                ]
+            },
+            validation_score=92.0,
+        )
+        assignment = TaskAssignment.objects.create(
+            task=task,
+            annotator=self.annotator,
+            round_number=1,
+            status=TaskAssignment.Status.SUBMITTED,
+            assigned_at=timezone.now(),
+            submitted_at=timezone.now(),
+        )
+        Annotation.objects.create(
+            task=task,
+            assignment=assignment,
+            annotator=self.annotator,
+            result_payload=task.consensus_payload,
+            submitted_at=timezone.now(),
+        )
+
+        list_response = self.client.get(
+            reverse("room-review-tasks", kwargs={"room_id": room.id}),
+            **self.auth(self.customer),
+        )
+        detail_response = self.client.get(
+            reverse("task-review-detail", kwargs={"task_id": task.id}),
+            **self.auth(self.customer),
+        )
+        reject_response = self.client.post(
+            reverse("task-reject", kwargs={"task_id": task.id}),
+            format="json",
+            **self.auth(self.customer),
+        )
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.data[0]["id"], task.id)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["task"]["id"], task.id)
+        self.assertEqual(len(detail_response.data["annotations"]), 1)
+        self.assertEqual(reject_response.status_code, status.HTTP_200_OK)
+
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.PENDING)
+        self.assertEqual(task.current_round, 2)
+        self.assertIsNone(task.consensus_payload)

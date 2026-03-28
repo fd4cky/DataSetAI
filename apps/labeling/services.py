@@ -9,6 +9,9 @@ from common.exceptions import AccessDeniedError, ConflictError
 
 
 def _assert_joined_membership(*, room: Room, annotator: User) -> None:
+    if room.created_by_id == annotator.id:
+        return
+
     is_joined = RoomMembership.objects.filter(
         room=room,
         user=annotator,
@@ -144,3 +147,30 @@ def submit_annotation(*, task: Task, annotator: User, result_payload):
             locked_task.save(update_fields=["updated_at"])
 
         return annotation
+
+
+def reject_task_annotation(*, task: Task, owner: User) -> Task:
+    if task.room.created_by_id != owner.id:
+        raise AccessDeniedError("Only the room owner can reject annotations.")
+
+    with transaction.atomic():
+        locked_task = Task.objects.select_for_update().select_related("room").get(id=task.id)
+        if locked_task.room.created_by_id != owner.id:
+            raise AccessDeniedError("Only the room owner can reject annotations.")
+        if locked_task.status != Task.Status.SUBMITTED:
+            raise ConflictError("Only submitted tasks can be rejected.")
+
+        locked_task.status = Task.Status.PENDING
+        locked_task.current_round += 1
+        locked_task.validation_score = None
+        locked_task.consensus_payload = None
+        locked_task.save(
+            update_fields=[
+                "status",
+                "current_round",
+                "validation_score",
+                "consensus_payload",
+                "updated_at",
+            ]
+        )
+        return locked_task

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.views import LogoutView
 from django.db import DatabaseError
@@ -40,6 +41,7 @@ class UiContextMixin:
         context["active_page"] = self.active_page
         context["page_key"] = self.page_key
         context["room_id"] = kwargs.get("room_id")
+        context["app_debug_mode"] = settings.APP_DEBUG_MODE
         context["auth_user_data"] = (
             {
                 "id": self.request.user.id,

@@ -69,6 +69,33 @@ class LabelingApiTests(APITestCase):
             TaskAssignment.Status.SUBMITTED,
         )
 
+    def test_room_owner_can_get_next_task_and_submit_annotation(self):
+        response = self.client.get(
+            reverse("room-next-task", kwargs={"room_id": self.room.id}),
+            **self.auth(self.customer),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.task_1.id)
+        self.assertTrue(
+            TaskAssignment.objects.filter(
+                task=self.task_1,
+                annotator=self.customer,
+                status=TaskAssignment.Status.IN_PROGRESS,
+            ).exists()
+        )
+
+        submit_response = self.client.post(
+            reverse("task-submit", kwargs={"task_id": self.task_1.id}),
+            {"result_payload": {"label": "owner-review"}},
+            format="json",
+            **self.auth(self.customer),
+        )
+
+        self.assertEqual(submit_response.status_code, status.HTTP_201_CREATED)
+        self.task_1.refresh_from_db()
+        self.assertEqual(self.task_1.status, Task.Status.SUBMITTED)
+
     def test_cross_validation_requires_multiple_matching_annotations(self):
         cross_room = make_room(
             customer=self.customer,

@@ -13,7 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.labeling.models import Task
-from apps.rooms.models import Room, RoomLabel, RoomMembership
+from apps.rooms.models import Room, RoomLabel, RoomMembership, RoomPin
 from apps.users.models import User
 from common.exceptions import AccessDeniedError, ConflictError, NotFoundError
 
@@ -205,6 +205,15 @@ def join_room(*, room: Room, annotator: User, password: str | None = None) -> Ro
         membership.save(update_fields=["status", "joined_at", "updated_at"])
 
     return membership
+
+
+def set_room_pinned(*, room: Room, user: User, is_pinned: bool) -> bool:
+    if is_pinned:
+        RoomPin.objects.get_or_create(room=room, user=user)
+        return True
+
+    RoomPin.objects.filter(room=room, user=user).delete()
+    return False
 
 
 def _create_demo_tasks(*, room: Room, task_count: int, dataset_label: str) -> None:

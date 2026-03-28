@@ -19,11 +19,11 @@
     </script>
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
     <link rel="shortcut icon" href="{% static 'ui/datasetai-favicon.png' %}?v=20260328-1">
-    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=brand-refresh-1">
+    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=labels-horizontal-scroll-1">
     {{ stats|json_script:"app-stats-data" }}
     {{ auth_user_data|json_script:"auth-user-data" }}
 </head>
-<body data-page="{{ page_key }}"{% if room_id %} data-room-id="{{ room_id }}"{% endif %}>
+<body data-page="{{ page_key }}"{% if room_id %} data-room-id="{{ room_id }}"{% endif %} data-app-debug-mode="{% if app_debug_mode %}true{% else %}false{% endif %}">
     <div class="app-shell">
         <header class="site-header">
             <div class="site-header__left">
@@ -69,6 +69,6 @@
         </main>
     </div>
 
-    <script src="{% static 'ui/app.js' %}?v=room-delete-owner-4"></script>
+    <script src="{% static 'ui/app.js' %}?v=labels-horizontal-scroll-1"></script>
 </body>
 </html>

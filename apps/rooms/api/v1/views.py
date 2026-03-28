@@ -10,6 +10,7 @@ from apps.rooms.api.v1.serializers import (
     RoomCreateSerializer,
     RoomJoinSerializer,
     RoomMembershipSerializer,
+    RoomPinSerializer,
     RoomSerializer,
 )
 from apps.rooms.selectors import (
@@ -20,7 +21,7 @@ from apps.rooms.selectors import (
     list_member_rooms,
     list_owned_rooms,
 )
-from apps.rooms.services import create_room, export_room_annotations, invite_user_to_room, join_room
+from apps.rooms.services import create_room, export_room_annotations, invite_user_to_room, join_room, set_room_pinned
 
 """
 Rooms API surface.
@@ -163,6 +164,26 @@ class RoomJoinView(APIView):
         serializer.is_valid(raise_exception=True)
         membership = join_room(room=room, annotator=request.user, password=serializer.validated_data.get("password"))
         return Response(RoomMembershipSerializer(membership).data)
+
+
+class RoomPinView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, room_id: int):
+        room = get_visible_room(room_id=room_id, user=request.user)
+        serializer = RoomPinSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        is_pinned = set_room_pinned(
+            room=room,
+            user=request.user,
+            is_pinned=serializer.validated_data["is_pinned"],
+        )
+        return Response(
+            {
+                "room_id": room.id,
+                "is_pinned": is_pinned,
+            }
+        )
 
 
 class RoomExportView(APIView):

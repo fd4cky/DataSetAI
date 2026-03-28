@@ -7,8 +7,25 @@ def make_user(*, username: str, role: str, email: str | None = None) -> User:
     return User.objects.create(username=username, email=email or f"{username}@example.com", role=role)
 
 
-def make_room(*, customer: User, title: str = "Room", description: str = "", dataset_type: str = Room.DatasetType.DEMO) -> Room:
-    return Room.objects.create(title=title, description=description, created_by=customer, dataset_type=dataset_type)
+def make_room(
+    *,
+    customer: User,
+    title: str = "Room",
+    description: str = "",
+    dataset_type: str = Room.DatasetType.DEMO,
+    cross_validation_enabled: bool = False,
+    cross_validation_annotators_count: int = 1,
+    cross_validation_similarity_threshold: int = 80,
+) -> Room:
+    return Room.objects.create(
+        title=title,
+        description=description,
+        created_by=customer,
+        dataset_type=dataset_type,
+        cross_validation_enabled=cross_validation_enabled,
+        cross_validation_annotators_count=cross_validation_annotators_count,
+        cross_validation_similarity_threshold=cross_validation_similarity_threshold,
+    )
 
 
 def invite_annotator(*, room: Room, annotator: User, invited_by: User, joined: bool = False) -> RoomMembership:

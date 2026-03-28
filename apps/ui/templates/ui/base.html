@@ -17,7 +17,7 @@
             document.documentElement.dataset.theme = preferredTheme;
         })();
     </script>
-    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=rooms-enter-id-only-1">
+    <link rel="stylesheet" href="{% static 'ui/app.css' %}?v=room-delete-owner-4">
     {{ stats|json_script:"app-stats-data" }}
     {{ auth_user_data|json_script:"auth-user-data" }}
 </head>
@@ -65,6 +65,6 @@
         </main>
     </div>
 
-    <script src="{% static 'ui/app.js' %}?v=rooms-enter-id-only-1"></script>
+    <script src="{% static 'ui/app.js' %}?v=room-delete-owner-4"></script>
 </body>
 </html>

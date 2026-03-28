@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.db.models import QuerySet
 from django.utils import timezone
 
-from apps.labeling.models import Annotation, Task
+from apps.labeling.models import Annotation, Task, TaskAssignment
 
 from apps.rooms.models import Room, RoomMembership
 from apps.rooms.services import get_supported_export_formats
@@ -97,6 +97,9 @@ def build_room_dashboard(*, room: Room, actor: User) -> dict:
             "description": room.description,
             "dataset_label": room.dataset_label,
             "dataset_type": room.dataset_type,
+            "cross_validation_enabled": room.cross_validation_enabled,
+            "cross_validation_annotators_count": room.cross_validation_annotators_count,
+            "cross_validation_similarity_threshold": room.cross_validation_similarity_threshold,
             "deadline": room.deadline.isoformat() if room.deadline else None,
             "has_password": room.has_password,
             "created_by_id": room.created_by_id,
@@ -122,7 +125,11 @@ def build_room_dashboard(*, room: Room, actor: User) -> dict:
 
     if actor_room_role == "annotator":
         actor_completed = Annotation.objects.filter(task__room=room, annotator=actor).count()
-        actor_in_progress = Task.objects.filter(room=room, assigned_to=actor, status=Task.Status.IN_PROGRESS).count()
+        actor_in_progress = TaskAssignment.objects.filter(
+            task__room=room,
+            annotator=actor,
+            status=TaskAssignment.Status.IN_PROGRESS,
+        ).count()
         actor_remaining = max(total_tasks - actor_completed, 0)
         actor_progress = round((actor_completed / total_tasks) * 100, 1) if total_tasks else 0.0
         activity = build_activity_series(
@@ -143,7 +150,11 @@ def build_room_dashboard(*, room: Room, actor: User) -> dict:
     for membership in memberships:
         user = membership.user
         user_completed = Annotation.objects.filter(task__room=room, annotator=user).count()
-        user_in_progress = Task.objects.filter(room=room, assigned_to=user, status=Task.Status.IN_PROGRESS).count()
+        user_in_progress = TaskAssignment.objects.filter(
+            task__room=room,
+            annotator=user,
+            status=TaskAssignment.Status.IN_PROGRESS,
+        ).count()
         user_remaining = max(total_tasks - user_completed, 0)
         user_progress = round((user_completed / total_tasks) * 100, 1) if total_tasks else 0.0
 

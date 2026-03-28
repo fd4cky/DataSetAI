@@ -1,7 +1,8 @@
 from django.db import connection, transaction
 from django.utils import timezone
 
-from apps.labeling.models import Annotation, Task
+from apps.labeling.consensus import evaluate_annotation_consensus
+from apps.labeling.models import Annotation, Task, TaskAssignment
 from apps.rooms.models import Room, RoomMembership
 from apps.users.models import User
 from common.exceptions import AccessDeniedError, ConflictError
@@ -21,50 +22,125 @@ def get_next_task_for_annotator(*, room: Room, annotator: User):
     _assert_joined_membership(room=room, annotator=annotator)
 
     with transaction.atomic():
-        current_task = (
-            Task.objects.select_for_update()
-            .filter(room=room, assigned_to=annotator, status=Task.Status.IN_PROGRESS)
-            .order_by("id")
+        current_assignment = (
+            TaskAssignment.objects.select_related("task")
+            .select_for_update()
+            .filter(
+                task__room=room,
+                annotator=annotator,
+                status=TaskAssignment.Status.IN_PROGRESS,
+            )
+            .order_by("task_id")
             .first()
         )
-        if current_task:
-            return current_task
+        if current_assignment:
+            return current_assignment.task
 
-        queryset = Task.objects.filter(room=room, status=Task.Status.PENDING).order_by("id")
+        queryset = Task.objects.filter(
+            room=room,
+            status__in=(Task.Status.PENDING, Task.Status.IN_PROGRESS),
+        ).order_by("id")
         if connection.features.has_select_for_update_skip_locked:
             queryset = queryset.select_for_update(skip_locked=True)
         else:
             queryset = queryset.select_for_update()
 
-        next_task = queryset.first()
-        if not next_task:
-            return None
+        required_reviews = room.required_reviews_per_item
+        for next_task in queryset:
+            if next_task.assignments.filter(annotator=annotator).exists():
+                continue
 
-        next_task.status = Task.Status.IN_PROGRESS
-        next_task.assigned_to = annotator
-        next_task.assigned_at = timezone.now()
-        next_task.save(update_fields=["status", "assigned_to", "assigned_at", "updated_at"])
-        return next_task
+            round_assignments_count = next_task.assignments.filter(
+                round_number=next_task.current_round,
+            ).count()
+            if round_assignments_count >= required_reviews:
+                continue
+
+            TaskAssignment.objects.create(
+                task=next_task,
+                annotator=annotator,
+                round_number=next_task.current_round,
+                status=TaskAssignment.Status.IN_PROGRESS,
+                assigned_at=timezone.now(),
+            )
+
+            if next_task.status != Task.Status.IN_PROGRESS:
+                next_task.status = Task.Status.IN_PROGRESS
+                next_task.save(update_fields=["status", "updated_at"])
+
+            return next_task
+
+        return None
 
 
 def submit_annotation(*, task: Task, annotator: User, result_payload):
-    if task.assigned_to_id != annotator.id:
-        raise AccessDeniedError("Task is not assigned to the current annotator.")
-    if task.status != Task.Status.IN_PROGRESS:
-        raise ConflictError("Only tasks in progress can be submitted.")
-
     with transaction.atomic():
-        if Annotation.objects.filter(task=task).exists():
-            raise ConflictError("Annotation for this task already exists.")
+        locked_task = Task.objects.select_for_update().select_related("room").get(id=task.id)
+        if locked_task.status != Task.Status.IN_PROGRESS:
+            raise ConflictError("Only tasks in progress can be submitted.")
+
+        assignment = (
+            TaskAssignment.objects.select_for_update()
+            .filter(
+                task=locked_task,
+                annotator=annotator,
+                status=TaskAssignment.Status.IN_PROGRESS,
+            )
+            .order_by("-round_number", "-assigned_at")
+            .first()
+        )
+        if assignment is None:
+            raise AccessDeniedError("Task is not assigned to the current annotator.")
+
+        if Annotation.objects.filter(assignment=assignment).exists():
+            raise ConflictError("Annotation for this assignment already exists.")
 
         annotation = Annotation.objects.create(
-            task=task,
+            task=locked_task,
+            assignment=assignment,
             annotator=annotator,
             result_payload=result_payload,
             submitted_at=timezone.now(),
         )
 
-        task.status = Task.Status.SUBMITTED
-        task.save(update_fields=["status", "updated_at"])
+        assignment.status = TaskAssignment.Status.SUBMITTED
+        assignment.submitted_at = annotation.submitted_at
+        assignment.save(update_fields=["status", "submitted_at", "updated_at"])
+
+        round_assignments = list(
+            locked_task.assignments.filter(round_number=locked_task.current_round).order_by("id")
+        )
+        submitted_assignments = [item for item in round_assignments if item.status == TaskAssignment.Status.SUBMITTED]
+
+        required_reviews = locked_task.room.required_reviews_per_item
+        if len(submitted_assignments) >= required_reviews:
+            round_annotations = list(
+                Annotation.objects.filter(assignment__in=submitted_assignments).order_by("submitted_at", "id")
+            )
+            consensus = evaluate_annotation_consensus(
+                annotations=round_annotations,
+                similarity_threshold=locked_task.room.cross_validation_similarity_threshold,
+            )
+
+            locked_task.validation_score = consensus["score"]
+            if consensus["accepted"]:
+                locked_task.status = Task.Status.SUBMITTED
+                locked_task.consensus_payload = consensus["consensus_payload"]
+            else:
+                locked_task.status = Task.Status.PENDING
+                locked_task.current_round += 1
+                locked_task.consensus_payload = None
+
+            locked_task.save(
+                update_fields=[
+                    "status",
+                    "current_round",
+                    "validation_score",
+                    "consensus_payload",
+                    "updated_at",
+                ]
+            )
+        else:
+            locked_task.save(update_fields=["updated_at"])
 
         return annotation

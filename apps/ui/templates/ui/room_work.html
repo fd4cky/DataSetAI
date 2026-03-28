@@ -8,20 +8,19 @@
             <div class="panel-card panel-card--workscreen">
                 <span class="eyebrow hero-card__eyebrow">Рабочая среда</span>
                 <div class="action-strip">
-                    <a class="btn btn--muted" href="/rooms/{{ room_id }}/">Назад в комнату</a>
+                    <a class="btn btn--muted btn--workscreen-back" href="/rooms/{{ room_id }}/">Назад в комнату</a>
                     <button id="work-join-btn" class="btn btn--muted" type="button">Войти в комнату</button>
-                    <button id="work-next-task-btn" class="btn btn--primary" type="button">Взять задачу</button>
                 </div>
                 <div id="work-task-box" class="empty-card">Задача пока не выбрана.</div>
                 <form id="work-submit-form" class="stack-form hidden">
                     <div id="work-media-tool" class="media-tool hidden">
                         <div id="work-media-instructions" class="panel-note">
-                            Зажми левую кнопку мыши и выдели область. Потом выбери label и кликни по области один раз, чтобы назначить его.
+                            Зажми левую кнопку мыши и выдели область. Новое выделение сразу получит активный label. Зажми существующую область, чтобы переместить ее, или выбери другой label и кликни по области один раз, чтобы поменять label.
                         </div>
                         <div id="work-label-palette" class="label-chip-list"></div>
                         <div id="work-active-label" class="panel-note">Активный label пока не выбран.</div>
                         <div class="media-tool__layout">
-                            <div id="work-media-stage" class="media-stage empty-card">Файл задачи загрузится после выбора задания.</div>
+                            <div id="work-media-stage" class="media-stage empty-card">Файл задачи загрузится автоматически.</div>
                             <div class="media-tool__sidebar">
                                 <div class="panel-note">Области без label-а не дадут отправить задачу.</div>
                                 <div id="work-annotation-list" class="annotation-list empty-card">Разметка пока отсутствует.</div>
